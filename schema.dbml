@@ -1,0 +1,53 @@
+Table users {
+  id uuid [
+    pk,
+    not null,
+    default: `gen_random_uuid()`,
+    note: 'Aletheia 內部使用者唯一識別碼'
+  ]
+
+  google_sub varchar(255) [
+    not null,
+    unique,
+    note: 'Google 提供的穩定唯一識別碼，用於辨識使用者'
+  ]
+
+  email varchar(320) [
+    not null,
+    unique,
+    note: '校方 Google Workspace 電子郵件地址'
+  ]
+
+  username varchar(255) [
+    note: '使用者顯示名稱，可選'
+  ]
+
+  avatar_url text [
+    note: '使用者頭像網址，可選'
+  ]
+
+  role varchar(20) [
+    not null,
+    note: '校園身分類型，例如 student、teacher、alumni'
+  ]
+
+  disabled_at timestamptz [
+    note: '由 Aletheia 手動停用帳號的時間；null 表示未停用'
+  ]
+
+  disabled_reason text [
+    note: '帳號被手動停用的原因'
+  ]
+
+  created_at timestamptz [
+    not null,
+    default: `now()`,
+    note: '首次完成 Aletheia 註冊的時間'
+  ]
+
+  updated_at timestamptz [
+    not null,
+    default: `now()`,
+    note: '帳號資料最後更新時間'
+  ]
+}
