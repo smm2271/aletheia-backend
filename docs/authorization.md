@@ -29,16 +29,47 @@ Code 是 256-bit 隨機 opaque 值，不包含使用者身份。Redis 使用 SHA
 資料綁定 user_id、client_id、redirect_uri、scope、nonce、expires_at 與選用 PKCE。
 預設 TTL 為 120 秒，可透過 AUTHORIZATION_CODE_TTL_SECONDS 設定 1 至 600 秒。
 
-Public Client 必須提供 PKCE S256 的 code_challenge / code_challenge_method；
-Confidential 可選用，但一旦提供就會綁定。plain 或格式錯誤的 challenge 會被拒絕。
+Public 與 Confidential Client 均必須提供 PKCE S256 的 code_challenge 與
+code_challenge_method=S256；plain 或格式錯誤的 challenge 會被拒絕。
 
-`sso.authorization.consume_code` 為後續 Token Endpoint 提供內部交換 primitive：
-Client / URI / PKCE 符合後才原子刪除並取得資料，重播與併發交換僅一次成功。
-呼叫端必須先驗證 Client 身份並重新確認啟用狀態；目前不對外提供 Token Endpoint、
-JWT、Refresh Token、JWKS 或 UserInfo。
+`sso.authorization.consume_code` 提供內部原子交換 primitive：
+Client / URI / PKCE 符合後才原子刪除並取得授權資料，重播與併發交換僅一次成功。
 
-回應設定 no-store / no-referrer；存取紀錄不得包含 code、state、Cookie 或 Secret。
-實際 Google 登入需先設定 Google Client，測試使用簽署的測試 token 與真正 Redis。
+## Token Endpoint
+
+`POST /token` 支援以短效、一次性的 Authorization Code 交換 Token，Content-Type 必須為
+`application/x-www-form-urlencoded`。
+
+```text
+POST /token
+Content-Type: application/x-www-form-urlencoded
+Authorization: Basic <base64(client_id:client_secret)>
+
+grant_type=authorization_code&code=<authorization-code>&redirect_uri=<exact-uri>&code_verifier=<pkce-verifier>
+```
+
+### 驗證規則
+
+1. **Grant Type**：僅支援 `authorization_code`；其他值回傳 `400 unsupported_grant_type`。
+2. **參數防護**：重複參數、不合法編碼或超長 Request Body 回傳 `400 invalid_request`。
+3. **Client 驗證**：
+   - 支援 HTTP Basic Auth 標頭與 Form Body（`client_id` 與 `client_secret`）。
+   - 同時使用 Basic 與 Form 憑證傳遞一律拒絕（`400 invalid_request`）。
+   - Confidential Client 必須通過 scrypt 雜湊比對；認證失敗回傳 `401 invalid_client`
+     （若使用 Basic 則附帶 `WWW-Authenticate: Basic realm="Argus"`）。
+   - Public Client 僅需傳遞 `client_id`，不要求 `client_secret`。
+4. **PKCE S256 驗證**：所有 Client 換碼時均必須提供 `code_verifier`，驗證失敗回傳 `400 invalid_grant`。
+5. **原子消耗與故障語義**：
+   - 透過 Redis Lua 腳本原子核對 Client ID、Redirect URI 與 PKCE S256，全部相符才刪除 Code。
+   - 驗證不相符時不刪除鍵值，避免惡意試探銷毀合法 Code。
+   - Code 一旦被成功刪除消耗，若後續步驟（如 User 停用、Token 簽發服務異常）失敗，絕不復原 Code。
+6. **Token 簽發責任分離**：
+   - Argus 定義 `TokenIssuer` 介面，實際 JWT / ID Token 簽發留交 #15。
+   - 正式環境未配置有效 Issuer 時回傳 `503 temporarily_unavailable`，不簽發偽造 Token。
+   - 成功回應回傳 `access_token`、`token_type=Bearer`、`expires_in`、以及 `openid` scope 存在時之 `id_token`。
+
+回應設定 `Cache-Control: no-store`、`Pragma: no-cache`、`Referrer-Policy: no-referrer`；
+日誌與錯誤訊息不得包含 Code、Verifier、Token 或 Client Secret。
 
 參考：[OAuth 2.0](https://www.rfc-editor.org/rfc/rfc6749.html)、
 [PKCE](https://www.rfc-editor.org/rfc/rfc7636.html)。

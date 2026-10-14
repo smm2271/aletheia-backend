@@ -66,8 +66,8 @@ def validate_request(engine, params: AuthorizationRequest):
             validate_redirects([params.redirect_uri])
         except ValueError:
             raise HTTPException(400, "Invalid registered redirect URI") from None
-        if client.client_type == ClientType.PUBLIC and params.code_challenge is None:
-            raise HTTPException(400, "Public clients require PKCE S256")
+        if params.code_challenge is None or params.code_challenge_method != "S256":
+            raise HTTPException(400, "All clients require PKCE S256")
         return client
 
 

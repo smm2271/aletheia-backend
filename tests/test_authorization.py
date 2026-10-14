@@ -40,6 +40,10 @@ def auth_flow(flow, monkeypatch):
             flow.store.delete(*keys)
 
 
+TEST_VERIFIER = "v" * 64
+TEST_CHALLENGE = base64.urlsafe_b64encode(hashlib.sha256(TEST_VERIFIER.encode("ascii")).digest()).rstrip(b"=").decode()
+
+
 def register(flow, **changes):
     data = {
         "client_id": "consumer", "name": "Consumer", "client_type": ClientType.CONFIDENTIAL,
@@ -52,7 +56,8 @@ def register(flow, **changes):
         session.add(SSOClient(**data))
         session.commit()
     return {"response_type": "code", "client_id": data["client_id"], "redirect_uri": data["redirect_uris"][0],
-            "scope": "openid profile", "state": "unchanged +&/雪"}
+            "scope": "openid profile", "state": "unchanged +&/雪",
+            "code_challenge": TEST_CHALLENGE, "code_challenge_method": "S256"}
 
 
 def authorize(flow, params):
@@ -150,8 +155,8 @@ def test_code_single_use_binding_and_expiry(auth_flow):
     login(auth_flow)
     params = register(auth_flow)
     code = issued_code(authorize(auth_flow, params))
-    def consume(client_id="consumer", uri=params["redirect_uri"]):
-        return auth_flow.client.portal.call(consume_code, app.state.redis_client, code, client_id, uri)
+    def consume(client_id="consumer", uri=params["redirect_uri"], verifier=TEST_VERIFIER):
+        return auth_flow.client.portal.call(consume_code, app.state.redis_client, code, client_id, uri, verifier)
     with pytest.raises(HTTPException):
         consume("other-client")
     with pytest.raises(HTTPException):
@@ -163,13 +168,12 @@ def test_code_single_use_binding_and_expiry(auth_flow):
     auth_flow.store.pexpire(CODE_PREFIX + context_fingerprint(expired), 50)
     time.sleep(0.1)
     with pytest.raises(HTTPException):
-        auth_flow.client.portal.call(consume_code, app.state.redis_client, expired, "consumer", params["redirect_uri"])
+        auth_flow.client.portal.call(consume_code, app.state.redis_client, expired, "consumer", params["redirect_uri"], TEST_VERIFIER)
 
 
 def test_public_pkce_and_atomic_concurrent_consumption(auth_flow):
     login(auth_flow)
     params = register(auth_flow, client_type=ClientType.PUBLIC, secret_hash=None)
-    assert authorize(auth_flow, params).status_code == 400
     verifier = "v" * 64
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
     params.update(code_challenge=challenge, code_challenge_method="S256")
@@ -184,6 +188,15 @@ def test_public_pkce_and_atomic_concurrent_consumption(auth_flow):
             return False
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sorted(pool.map(consume, range(2))) == [False, True]
+
+
+def test_pkce_required_for_all_clients(auth_flow):
+    login(auth_flow)
+    confidential = register(auth_flow)
+    without_pkce = {k: v for k, v in confidential.items() if not k.startswith("code_challenge")}
+    assert authorize(auth_flow, without_pkce).status_code == 400
+    with_plain = {**confidential, "code_challenge_method": "plain"}
+    assert authorize(auth_flow, with_plain).status_code == 400
 
 
 def test_duplicate_parameters_are_rejected(auth_flow):
