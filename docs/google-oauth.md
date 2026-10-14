@@ -72,7 +72,8 @@ docker compose up --build -d --wait
 ## 測試
 
 先執行 `python -m pip install -r requirements-dev.txt`，沿用 `TEST_DATABASE_URL`
-專用空白 PostgreSQL 資料庫，執行 `python -m pytest -q`。
+專用空白 PostgreSQL 資料庫，並設定 `TEST_REDIS_URL` 為專用 Redis database，
+執行 `python -m pytest -q`。
 OAuth 測試使用測試 RSA 金鑰簽署 ID token，保留真正的 google-auth 驗證，只替換
 Google token / certificate HTTP 回應，涵蓋正常登入與失效 token 等情境。
 不需要真實 Google client secret。真實 Google 瀏覽器授權須由部署者提供 client
