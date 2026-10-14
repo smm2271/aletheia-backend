@@ -17,11 +17,12 @@ def validate_redirects(values: list[str]) -> list[str]:
     for value in values:
         try:
             uri = urlsplit(value)
-            if (value != value.strip() or len(value) > 2048 or "*" in value
+            if (value != value.strip() or len(value) > 2048 or "*" in value or "#" in value
+                    or any(ord(c) <= 32 or ord(c) == 127 for c in value)
                     or uri.scheme not in {"http", "https"} or not uri.hostname
                     or uri.username or uri.password or uri.fragment
                     or (uri.scheme == "http" and uri.hostname not in {"localhost", "127.0.0.1", "::1"})
-                    or any(k in {"code", "state", "error", "error_description"} for k, v in parse_qsl(uri.query))):
+                    or any(k in {"code", "state", "error", "error_description"} for k, v in parse_qsl(uri.query, keep_blank_values=True))):
                 raise ValueError()
             uri.port
         except ValueError:

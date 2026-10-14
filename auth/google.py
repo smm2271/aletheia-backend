@@ -66,13 +66,13 @@ def digest(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
-def begin_login(session: Session, settings: GoogleSettings) -> tuple[str, str]:
+def begin_login(session: Session, settings: GoogleSettings, continuation_hash: str | None = None) -> tuple[str, str]:
     state, browser, nonce = (secrets.token_urlsafe(32) for _ in range(3))
     verifier = secrets.token_urlsafe(64)
     session.execute(delete(OAuthAttempt).where(OAuthAttempt.expires_at <= func.now()))
     session.add(OAuthAttempt(
         state_hash=digest(state), browser_hash=digest(browser), nonce=nonce,
-        code_verifier=verifier, expires_at=datetime.now(timezone.utc) + timedelta(seconds=ATTEMPT_TTL),
+        code_verifier=verifier, expires_at=datetime.now(timezone.utc) + timedelta(seconds=ATTEMPT_TTL), continuation_hash=continuation_hash,
     ))
     session.commit()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode("ascii")
@@ -86,17 +86,17 @@ def begin_login(session: Session, settings: GoogleSettings) -> tuple[str, str]:
     return AUTHORIZATION_URL + "?" + urlencode(params), browser
 
 
-def consume_attempt(session: Session, state: str | None, browser: str | None) -> tuple[str, str]:
+def consume_attempt(session: Session, state: str | None, browser: str | None) -> tuple[str, str, str | None]:
     if not state or not browser or len(state) > 128 or len(browser) > 128:
         raise OAuthError(400, "Invalid or expired OAuth state")
     attempt = session.execute(delete(OAuthAttempt).where(
         OAuthAttempt.state_hash == digest(state), OAuthAttempt.browser_hash == digest(browser),
         OAuthAttempt.expires_at > func.now(),
-    ).returning(OAuthAttempt.nonce, OAuthAttempt.code_verifier)).first()
+    ).returning(OAuthAttempt.nonce, OAuthAttempt.code_verifier, OAuthAttempt.continuation_hash)).first()
     session.commit()  # Consume even when the provider refuses or verification fails.
     if attempt is None:
         raise OAuthError(400, "Invalid or expired OAuth state")
-    return attempt.nonce, attempt.code_verifier
+    return attempt.nonce, attempt.code_verifier, attempt.continuation_hash
 
 
 class BoundedGoogleRequest(GoogleRequest):

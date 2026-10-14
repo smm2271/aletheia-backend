@@ -63,10 +63,14 @@ jobs:
           docker compose exec -T backend python - <<'PY'
           import asyncio
           import httpx
+          from urllib.parse import parse_qs, urlsplit
+          from fastapi import HTTPException
           from sqlalchemy.orm import Session
           from auth.session import COOKIE_NAME, SessionSettings, create_session, revoke_session
           from database import create_database_engine
-          from models import Affiliation, User
+          from models import Affiliation, SSOClient, User
+          from sso.authorization import consume_code
+          from sso.clients import verify_client_secret
           from redis_connection import create_redis_client
 
           async def provision(user_id):
@@ -83,11 +87,18 @@ jobs:
               finally:
                   await client.aclose()
 
+          async def exchange(code, client_id, uri):
+              client = create_redis_client()
+              try:
+                  return await consume_code(client, code, client_id, uri)
+              finally:
+                  await client.aclose()
+
           engine = create_database_engine()
           token = None
           try:
               with Session(engine) as db:
-                  user = User(email='session-smoke@example.edu', affiliation=Affiliation.STUDENT)
+                  user = User(email='session-smoke@example.edu', affiliation=Affiliation.STUDENT, is_admin=True)
                   db.add(user)
                   db.commit()
                   user_id = user.id
@@ -98,12 +109,37 @@ jobs:
                       response = client.get('/auth/me')
                       assert response.status_code == 200
                       assert response.json()['user']['id'] == str(user_id)
+                      assert client.get('/api/v1/admin/me').status_code == 200
+                      created = client.post('/api/v1/admin/clients', headers={'Origin': 'http://localhost:8000'}, json={
+                          'name': 'SSO smoke', 'client_type': 'confidential', 'trust_level': 'first_party',
+                          'redirect_uris': ['https://consumer.example/callback'], 'allowed_scopes': ['openid'],
+                      })
+                      assert created.status_code == 201
+                      registered = created.json()
+                      with Session(engine) as db:
+                          assert verify_client_secret(db.get(SSOClient, registered['client_id']), registered['client_secret'])
+                      authorized = client.get('/authorize', params={
+                          'response_type': 'code', 'client_id': registered['client_id'],
+                          'redirect_uri': 'https://consumer.example/callback', 'scope': 'openid', 'state': 'ci-state',
+                      }, follow_redirects=False)
+                      assert authorized.status_code == 302
+                      query = parse_qs(urlsplit(authorized.headers['location']).query)
+                      assert query['state'] == ['ci-state']
+                      grant = asyncio.run(exchange(query['code'][0], registered['client_id'], 'https://consumer.example/callback'))
+                      assert grant['user_id'] == str(user_id)
+                      try:
+                          asyncio.run(exchange(query['code'][0], registered['client_id'], 'https://consumer.example/callback'))
+                      except HTTPException as error:
+                          assert error.status_code == 400
+                      else:
+                          raise AssertionError('Authorization code replay was accepted')
+                      assert client.delete('/api/v1/admin/clients/' + registered['client_id'], headers={'Origin': 'http://localhost:8000'}).status_code == 204
                       response = client.post('/auth/logout', headers={'Origin': 'http://localhost:8000'})
                       assert response.status_code == 204
                       client.cookies.clear()
                       client.cookies.set(COOKIE_NAME, token)
                       assert client.get('/auth/me').status_code == 401
-                  print('Browser session creation, authentication and revocation passed')
+                  print('Admin, Client management, authorization code and Session checks passed')
               finally:
                   if token:
                       asyncio.run(revoke(token))

@@ -77,6 +77,7 @@ Table oauth_attempts {
   state_hash varchar(64) [pk, not null, note: '一次性 OAuth state 的 SHA-256']
   browser_hash varchar(64) [not null, note: '暫時瀏覽器握手 cookie 的 SHA-256']
   nonce varchar(64) [not null]
+  continuation_hash varchar(64) [note: '綁定瀏覽器的 SSO 授權續接，Google 登入與原請求不可互換']
   code_verifier varchar(128) [not null, note: '短期 PKCE verifier，不是登入 session']
   expires_at timestamptz [not null]
 
