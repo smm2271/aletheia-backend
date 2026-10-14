@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 from alembic import command
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
@@ -92,6 +93,6 @@ def test_downgrade_refuses_lossy_identity_conversion(database, identities):
     with pytest.raises(ProgrammingError, match="Cannot downgrade"):
         command.downgrade(config, "20260911_0001")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261014_0003"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == ScriptDirectory.from_config(config).get_current_head()
         assert connection.scalar(text("SELECT count(*) FROM external_identities")) == len(identities)
     assert "google_sub" not in {c["name"] for c in inspect(engine).get_columns("users")}
