@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -16,9 +17,12 @@ from fastapi.testclient import TestClient
 from google.auth import crypt, jwt
 from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
+from redis import Redis
 
 from auth import google
 from auth import affiliation
+from auth import session as browser_session
+from routes import auth as auth_routes
 from auth.affiliation import determine_affiliation
 from main import app
 from models import Affiliation, ExternalIdentity, OAuthAttempt, User
@@ -39,6 +43,7 @@ def flow(database, monkeypatch, signing_key):
     for key, value in {
         "GOOGLE_CLIENT_ID": "test-client", "GOOGLE_CLIENT_SECRET": "test-secret",
         "GOOGLE_REDIRECT_URI": "http://testserver/auth/google/callback", "GOOGLE_HOSTED_DOMAIN": "",
+        "SESSION_PUBLIC_ORIGIN": "http://localhost", "SESSION_COOKIE_SECURE": "false",
     }.items():
         monkeypatch.setenv(key, value)
     # HTTP is permitted only on loopback, so give TestClient the configured host.
@@ -72,8 +77,20 @@ def flow(database, monkeypatch, signing_key):
     monkeypatch.setattr(google.BoundedGoogleRequest, "__call__", lambda *a, **k: SimpleNamespace(
         status=200, data=json.dumps({"test-key": signing_key[1]}).encode(),
     ))
-    with TestClient(app, base_url="http://localhost") as client:
-        yield SimpleNamespace(client=client, engine=engine, config=config, provider=provider)
+    created_keys = []
+    original_create_session = browser_session.create_session
+    async def record_session(*args, **kwargs):
+        token = await original_create_session(*args, **kwargs)
+        created_keys.append(browser_session.session_key(token))
+        return token
+    monkeypatch.setattr(auth_routes, "create_session", record_session)
+    with Redis.from_url(os.environ["TEST_REDIS_URL"], decode_responses=True) as store:
+        try:
+            with TestClient(app, base_url="http://localhost") as client:
+                yield SimpleNamespace(client=client, engine=engine, config=config, provider=provider, store=store)
+        finally:
+            if created_keys:
+                store.delete(*created_keys)
 
 
 def start(flow, **claims):

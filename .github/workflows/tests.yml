@@ -58,6 +58,61 @@ jobs:
           docker compose exec -T backend python -m redis_connection
           docker compose exec -T backend python -m alembic current
           docker compose exec -T backend python -m alembic check
+      - name: Verify browser session against running Backend
+        run: |
+          docker compose exec -T backend python - <<'PY'
+          import asyncio
+          import httpx
+          from sqlalchemy.orm import Session
+          from auth.session import COOKIE_NAME, SessionSettings, create_session, revoke_session
+          from database import create_database_engine
+          from models import Affiliation, User
+          from redis_connection import create_redis_client
+
+          async def provision(user_id):
+              client = create_redis_client()
+              try:
+                  return await create_session(client, user_id, SessionSettings.from_environment())
+              finally:
+                  await client.aclose()
+
+          async def revoke(token):
+              client = create_redis_client()
+              try:
+                  await revoke_session(client, token)
+              finally:
+                  await client.aclose()
+
+          engine = create_database_engine()
+          token = None
+          try:
+              with Session(engine) as db:
+                  user = User(email='session-smoke@example.edu', affiliation=Affiliation.STUDENT)
+                  db.add(user)
+                  db.commit()
+                  user_id = user.id
+              try:
+                  token = asyncio.run(provision(user_id))
+                  with httpx.Client(base_url='http://localhost:8000') as client:
+                      client.cookies.set(COOKIE_NAME, token)
+                      response = client.get('/auth/me')
+                      assert response.status_code == 200
+                      assert response.json()['user']['id'] == str(user_id)
+                      response = client.post('/auth/logout', headers={'Origin': 'http://localhost:8000'})
+                      assert response.status_code == 204
+                      client.cookies.clear()
+                      client.cookies.set(COOKIE_NAME, token)
+                      assert client.get('/auth/me').status_code == 401
+                  print('Browser session creation, authentication and revocation passed')
+              finally:
+                  if token:
+                      asyncio.run(revoke(token))
+                  with Session(engine) as db:
+                      db.delete(db.get(User, user_id))
+                      db.commit()
+          finally:
+              engine.dispose()
+          PY
       - name: Verify database outage readiness
         run: |
           docker compose stop db

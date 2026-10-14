@@ -81,7 +81,8 @@ python -m redis_connection
 Redis 停用 RDB snapshot 與 AOF，`/data` 使用 tmpfs。重啟 Redis container
 就會清除記憶體中的資料。使用者身份等持久化資料由 PostgreSQL 保存。
 後續寫入 Browser Session、Nonce 等短期資料時必須指定 TTL。
-本次僅提供 Redis Client 與連線能力，Session / SSO 邏輯會由後續功能接入。
+Browser Session 已使用 Redis，詳見 [browser-session.md](browser-session.md)。
+SSO 邏輯會由後續功能接入。
 
 `python -m redis_connection` 會 PING，再以隨機測試 key 寫入 60 秒 TTL 的值，
 讀回並驗證 TTL，最後刪除測試 key；失敗時回傳非零 exit code。
