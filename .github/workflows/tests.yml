@@ -62,6 +62,8 @@ jobs:
         run: |
           docker compose exec -T backend python - <<'PY'
           import asyncio
+          import base64
+          import hashlib
           import httpx
           from urllib.parse import parse_qs, urlsplit
           from fastapi import HTTPException
@@ -87,10 +89,10 @@ jobs:
               finally:
                   await client.aclose()
 
-          async def exchange(code, client_id, uri):
+          async def exchange(code, client_id, uri, verifier):
               client = create_redis_client()
               try:
-                  return await consume_code(client, code, client_id, uri)
+                  return await consume_code(client, code, client_id, uri, verifier)
               finally:
                   await client.aclose()
 
@@ -118,21 +120,37 @@ jobs:
                       registered = created.json()
                       with Session(engine) as db:
                           assert verify_client_secret(db.get(SSOClient, registered['client_id']), registered['client_secret'])
+                      verifier = 'v' * 64
+                      challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest()).rstrip(b'=').decode()
                       authorized = client.get('/authorize', params={
                           'response_type': 'code', 'client_id': registered['client_id'],
                           'redirect_uri': 'https://consumer.example/callback', 'scope': 'openid', 'state': 'ci-state',
+                          'code_challenge': challenge, 'code_challenge_method': 'S256',
                       }, follow_redirects=False)
                       assert authorized.status_code == 302
                       query = parse_qs(urlsplit(authorized.headers['location']).query)
                       assert query['state'] == ['ci-state']
-                      grant = asyncio.run(exchange(query['code'][0], registered['client_id'], 'https://consumer.example/callback'))
+                      grant = asyncio.run(exchange(query['code'][0], registered['client_id'], 'https://consumer.example/callback', verifier))
                       assert grant['user_id'] == str(user_id)
                       try:
-                          asyncio.run(exchange(query['code'][0], registered['client_id'], 'https://consumer.example/callback'))
+                          asyncio.run(exchange(query['code'][0], registered['client_id'], 'https://consumer.example/callback', verifier))
                       except HTTPException as error:
                           assert error.status_code == 400
                       else:
                           raise AssertionError('Authorization code replay was accepted')
+                      auth2 = client.get('/authorize', params={
+                          'response_type': 'code', 'client_id': registered['client_id'],
+                          'redirect_uri': 'https://consumer.example/callback', 'scope': 'openid', 'state': 'ci-state-2',
+                          'code_challenge': challenge, 'code_challenge_method': 'S256',
+                      }, follow_redirects=False)
+                      q2 = parse_qs(urlsplit(auth2.headers['location']).query)
+                      token_res = client.post('/token', data={
+                          'grant_type': 'authorization_code', 'code': q2['code'][0],
+                          'redirect_uri': 'https://consumer.example/callback', 'code_verifier': verifier,
+                          'client_id': registered['client_id'], 'client_secret': registered['client_secret'],
+                      }, headers={'Content-Type': 'application/x-www-form-urlencoded'})
+                      assert token_res.status_code == 503
+                      assert token_res.json()['error'] == 'temporarily_unavailable'
                       assert client.delete('/api/v1/admin/clients/' + registered['client_id'], headers={'Origin': 'http://localhost:8000'}).status_code == 204
                       response = client.post('/auth/logout', headers={'Origin': 'http://localhost:8000'})
                       assert response.status_code == 204
