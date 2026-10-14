@@ -22,6 +22,8 @@ Table users {
     note: '使用者顯示名稱，可選'
   ]
 
+  is_admin boolean [not null, default: false, note: '基本管理權限，與 affiliation 分離']
+
   avatar_url text [
     note: '使用者頭像網址，可選'
   ]
