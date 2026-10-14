@@ -6,6 +6,7 @@ from sqlalchemy import text
 from database import create_database_engine
 
 from routes import router
+from routes.auth import router as auth_router
 
 
 @asynccontextmanager
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Aletheia API", lifespan=lifespan)
 app.include_router(router)
+app.include_router(auth_router)
 
 
 @app.get("/")
