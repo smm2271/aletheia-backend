@@ -134,6 +134,11 @@ def user_profile(user: User) -> dict:
     }
 
 
+def require_same_origin(request: Request) -> None:
+    if request.headers.get("origin") != SessionSettings.from_environment().public_origin:
+        raise SessionError(403, "Invalid request origin")
+
+
 def load_user(engine, user_id: uuid.UUID) -> User | None:
     with Session(engine) as session:
         return session.get(User, user_id)

@@ -12,6 +12,7 @@ from routes import router
 from routes.auth import router as auth_router
 from routes.session import router as session_router
 from routes.admin import router as admin_router
+from routes.clients import router as clients_router
 
 
 @asynccontextmanager
@@ -39,6 +40,7 @@ app.include_router(router)
 app.include_router(auth_router)
 app.include_router(session_router)
 app.include_router(admin_router)
+app.include_router(clients_router)
 
 
 @app.exception_handler(SessionError)
