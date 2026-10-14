@@ -31,3 +31,35 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install -r requirements.txt pytest
       - run: python -m pytest -q
+
+  compose:
+    runs-on: ubuntu-latest
+    env:
+      COMPOSE_PROJECT_NAME: aletheia-ci
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp .env.example .env
+      - run: docker compose config --quiet
+      - run: docker compose up --build -d --wait --wait-timeout 180
+      - run: |
+          curl --fail http://localhost:8000/health
+          curl --fail http://localhost:8000/health/db
+          docker compose exec -T backend python -m alembic current
+          docker compose exec -T backend python -m alembic check
+      - name: Verify database outage readiness
+        run: |
+          docker compose stop db
+          test "$(curl -s -o /tmp/readiness.json -w '%{http_code}' http://localhost:8000/health/db)" = "503"
+          curl --fail http://localhost:8000/health
+          docker compose up -d --wait --wait-timeout 180
+      - name: Verify persistent database volume
+        run: |
+          docker compose exec -T db psql -U aletheia -d aletheia -v ON_ERROR_STOP=1 -c "CREATE TABLE compose_smoke (value integer); INSERT INTO compose_smoke VALUES (42);"
+          docker compose down
+          docker compose up -d --wait --wait-timeout 180
+          test "$(docker compose exec -T db psql -U aletheia -d aletheia -Atc 'SELECT value FROM compose_smoke')" = "42"
+          curl --fail http://localhost:8000/health/db
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down -v
