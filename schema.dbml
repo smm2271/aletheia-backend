@@ -84,3 +84,26 @@ Table oauth_attempts {
     expires_at [name: 'ix_oauth_attempts_expires_at']
   }
 }
+
+Enum sso_client_type {
+  public
+  confidential
+}
+
+Enum sso_trust_level {
+  first_party
+  external
+}
+
+Table sso_clients {
+  client_id varchar(64) [pk, not null]
+  name varchar(255) [not null]
+  client_type sso_client_type [not null]
+  trust_level sso_trust_level [not null]
+  enabled boolean [not null, default: true]
+  redirect_uris jsonb [not null, note: '精確匹配的 URI 陣列']
+  allowed_scopes jsonb [not null, note: '允許的 Scope 陣列']
+  secret_hash text [note: 'public 為 null；confidential 僅儲存 scrypt hash']
+  created_at timestamptz [not null, default: `now()`]
+  updated_at timestamptz [not null, default: `now()`]
+}
