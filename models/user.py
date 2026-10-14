@@ -1,12 +1,16 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Enum, Index, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from models.base import Base
+
+if TYPE_CHECKING:
+    from models.external_identity import ExternalIdentity
 
 
 class Affiliation(str, enum.Enum):
@@ -28,7 +32,10 @@ class User(Base):
         default=uuid.uuid4,
         server_default=text("gen_random_uuid()"),
     )
-    google_sub: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    external_identities: Mapped[list["ExternalIdentity"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan", passive_deletes=True,
+    )
+    # Business uniqueness only; external login uses (provider, subject).
     email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     username: Mapped[str | None] = mapped_column(String(255))
     avatar_url: Mapped[str | None] = mapped_column(Text)
