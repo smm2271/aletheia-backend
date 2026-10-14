@@ -1,9 +1,26 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
+from sqlalchemy import text
+
+from database import create_database_engine
 
 from routes import router
 
 
-app = FastAPI(title="Aletheia API")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    engine = create_database_engine()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+        app.state.database_engine = engine
+        yield
+    finally:
+        engine.dispose()
+
+
+app = FastAPI(title="Aletheia API", lifespan=lifespan)
 app.include_router(router)
 
 
