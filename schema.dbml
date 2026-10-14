@@ -1,0 +1,72 @@
+Enum user_affiliation {
+  student
+  teacher
+  alumni
+}
+
+Table users {
+  id uuid [
+    pk,
+    not null,
+    default: `gen_random_uuid()`,
+    note: 'Aletheia 內部使用者唯一識別碼'
+  ]
+
+  email varchar(320) [
+    not null,
+    unique,
+    note: 'Aletheia 業務唯一的電子郵件地址；不作為外部登入身份識別依據'
+  ]
+
+  username varchar(255) [
+    note: '使用者顯示名稱，可選'
+  ]
+
+  avatar_url text [
+    note: '使用者頭像網址，可選'
+  ]
+
+  affiliation user_affiliation [
+    not null,
+    note: '校園身分類型，例如 student、teacher、alumni'
+  ]
+
+  disabled_at timestamptz [
+    note: '由 Aletheia 手動停用帳號的時間；null 表示未停用'
+  ]
+
+  disabled_reason text [
+    note: '帳號被手動停用的原因'
+  ]
+
+  created_at timestamptz [
+    not null,
+    default: `now()`,
+    note: '首次完成 Aletheia 註冊的時間'
+  ]
+
+  updated_at timestamptz [
+    not null,
+    default: `now()`,
+    note: '帳號資料最後更新時間；SQLAlchemy 更新時刷新，非 DB trigger'
+  ]
+
+  indexes {
+    affiliation [name: 'ix_users_affiliation']
+    disabled_at [name: 'ix_users_disabled_at']
+  }
+}
+
+Table external_identities {
+  id uuid [pk, not null, default: `gen_random_uuid()`]
+  user_id uuid [not null]
+  provider varchar(255) [not null, note: '身份來源，例如 google；OIDC Provider 必須使用可區分 issuer 的穩定識別值']
+  subject varchar(255) [not null, note: 'Provider 內的穩定身份識別碼，例如 Google sub']
+
+  indexes {
+    (provider, subject) [unique, name: 'uq_external_identities_provider_subject']
+    user_id [name: 'ix_external_identities_user_id']
+  }
+}
+
+Ref: external_identities.user_id > users.id [delete: cascade]
