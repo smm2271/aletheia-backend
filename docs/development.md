@@ -113,6 +113,8 @@ GitHub Actions 會使用 `.env.example` 建置映像、啟動 Compose、檢查 A
 同時驗證 Redis 讀寫與 TTL、Redis 停止時的 503，以及重新啟動後恢復健康。
 獨立的 PostgreSQL 身份模型測試請參閱 [identity-model.md](identity-model.md)。
 Google 登入與可修改的校園身份規則請參閱 [google-oauth.md](google-oauth.md)。
+管理權限、Client 註冊與授權流程請參閱 [admin.md](admin.md)、
+[sso-clients.md](sso-clients.md) 與 [authorization.md](authorization.md)。
 
 本機整合測試先安裝 `requirements-dev.txt`，設定 `TEST_DATABASE_URL` 為專用
 空白 PostgreSQL 資料庫、`TEST_REDIS_URL` 為專用 Redis database，再執行

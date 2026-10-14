@@ -15,5 +15,6 @@ class OAuthAttempt(Base):
     state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
     browser_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     nonce: Mapped[str] = mapped_column(String(64), nullable=False)
+    continuation_hash: Mapped[str | None] = mapped_column(String(64))
     code_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

@@ -11,6 +11,7 @@ from auth.session import (
     COOKIE_NAME as SESSION_COOKIE_NAME, SessionError, SessionSettings,
     create_session, set_session_cookie, user_profile,
 )
+from sso.authorization import CONTEXT_COOKIE, context_fingerprint
 
 router = APIRouter(prefix="/auth/google", tags=["Authentication"])
 
@@ -25,8 +26,9 @@ def finish_response(response):
 def google_login(request: Request):
     try:
         settings = GoogleSettings.from_environment()
+        continuation = context_fingerprint(request.cookies.get(CONTEXT_COOKIE)) if request.query_params.get("continue") == "authorization" else None
         with Session(request.app.state.database_engine) as session:
-            location, browser = begin_login(session, settings)
+            location, browser = begin_login(session, settings, continuation)
         response = RedirectResponse(location, status_code=302)
         response.set_cookie(
             COOKIE_NAME, browser, max_age=ATTEMPT_TTL, httponly=True,
@@ -43,7 +45,7 @@ def complete_google_login(request: Request):
         if len(request.query_params.getlist(key)) > 1:
             raise OAuthError(400, "Invalid OAuth callback parameters")
     with Session(request.app.state.database_engine) as session:
-        nonce, verifier = consume_attempt(
+        nonce, verifier, continuation = consume_attempt(
             session, request.query_params.get("state"), request.cookies.get(COOKIE_NAME),
         )
         if error := request.query_params.get("error"):
@@ -53,7 +55,7 @@ def complete_google_login(request: Request):
             raise OAuthError(400, "Missing or invalid authorization code")
         claims = exchange_identity(code, verifier, nonce, settings)
         user = resolve_user(session, claims, settings)
-        return user.id, user_profile(user)
+        return user.id, user_profile(user), continuation
 
 
 @router.get("/callback")
@@ -62,11 +64,14 @@ async def google_callback(request: Request):
         settings = SessionSettings.from_environment()
         if not settings.secure_cookie and request.url.hostname not in {"localhost", "127.0.0.1", "::1"}:
             raise SessionError(503, "Insecure session cookies require a local host")
-        user_id, profile = await run_in_threadpool(complete_google_login, request)
+        user_id, profile, continuation = await run_in_threadpool(complete_google_login, request)
         token = await create_session(
             request.app.state.redis_client, user_id, settings, request.cookies.get(SESSION_COOKIE_NAME),
         )
-        response = JSONResponse({"user": profile})
+        if continuation and continuation == context_fingerprint(request.cookies.get(CONTEXT_COOKIE)):
+            response = RedirectResponse("/authorize/resume", status_code=303)
+        else:
+            response = JSONResponse({"user": profile})
         set_session_cookie(response, token, settings)
     except (OAuthError, SessionError) as error:
         response = JSONResponse({"detail": error.detail}, status_code=error.status)
