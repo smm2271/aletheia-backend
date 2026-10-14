@@ -70,3 +70,15 @@ Table external_identities {
 }
 
 Ref: external_identities.user_id > users.id [delete: cascade]
+
+Table oauth_attempts {
+  state_hash varchar(64) [pk, not null, note: '一次性 OAuth state 的 SHA-256']
+  browser_hash varchar(64) [not null, note: '暫時瀏覽器握手 cookie 的 SHA-256']
+  nonce varchar(64) [not null]
+  code_verifier varchar(128) [not null, note: '短期 PKCE verifier，不是登入 session']
+  expires_at timestamptz [not null]
+
+  indexes {
+    expires_at [name: 'ix_oauth_attempts_expires_at']
+  }
+}

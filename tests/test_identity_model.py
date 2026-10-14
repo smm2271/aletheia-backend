@@ -1,32 +1,12 @@
-import os
 import uuid
 
 import pytest
 from alembic import command
-from alembic.config import Config
-from sqlalchemy import create_engine, inspect, select, text
+from sqlalchemy import inspect, select, text
 from sqlalchemy.exc import IntegrityError, ProgrammingError
 from sqlalchemy.orm import Session
 
 from models import Affiliation, ExternalIdentity, User
-
-
-@pytest.fixture
-def database(monkeypatch):
-    url = os.getenv("TEST_DATABASE_URL")
-    if not url:
-        pytest.skip("Set TEST_DATABASE_URL to a dedicated empty PostgreSQL database")
-    monkeypatch.setenv("DATABASE_URL", url)
-    engine = create_engine(url)
-    assert not inspect(engine).get_table_names(), "Tests require an empty database"
-    config = Config("alembic.ini")
-    try:
-        yield engine, config
-    finally:
-        with engine.begin() as connection:
-            connection.execute(text("DROP SCHEMA public CASCADE"))
-            connection.execute(text("CREATE SCHEMA public"))
-        engine.dispose()
 
 
 def make_user(email="student@example.edu"):
@@ -112,6 +92,6 @@ def test_downgrade_refuses_lossy_identity_conversion(database, identities):
     with pytest.raises(ProgrammingError, match="Cannot downgrade"):
         command.downgrade(config, "20260911_0001")
     with engine.connect() as connection:
-        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261014_0002"
+        assert connection.scalar(text("SELECT version_num FROM alembic_version")) == "20261014_0003"
         assert connection.scalar(text("SELECT count(*) FROM external_identities")) == len(identities)
     assert "google_sub" not in {c["name"] for c in inspect(engine).get_columns("users")}

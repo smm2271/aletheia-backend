@@ -82,6 +82,7 @@ docker compose down -v
 GitHub Actions 會使用 `.env.example` 建置映像、啟動 Compose、檢查 API / DB
 健康狀態、執行 Alembic check，並確認 DB container 重建後資料仍存在。
 獨立的 PostgreSQL 身份模型測試請參閱 [identity-model.md](identity-model.md)。
+Google 登入與可修改的校園身份規則請參閱 [google-oauth.md](google-oauth.md)。
 
 參考：[Compose 啟動順序](https://docs.docker.com/compose/how-tos/startup-order/)、
 [PostgreSQL 官方映像](https://hub.docker.com/_/postgres)。
