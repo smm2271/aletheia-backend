@@ -18,7 +18,8 @@ GOOGLE_HOSTED_DOMAIN=
 執行 `docker compose up --build -d --wait` 後，在瀏覽器開啟
 http://localhost:8000/auth/google/login。完成 Google 授權後，callback 回傳
 內部 User 的 `id`、email、username、avatar_url 與 affiliation。
-這次回傳只代表當次身份驗證成功，不建立持續登入狀態，也不發行 Argus JWT。
+callback 同時建立 Redis Browser Session，並以 HttpOnly cookie 維持登入狀態；
+詳見 [browser-session.md](browser-session.md)。不發行 Argus JWT。
 Google 的 access / ID token 不會存入 DB 或回傳給瀏覽器。
 
 OAuth 設定未提供時，登入入口回傳 503，其他 API 仍可使用。
@@ -67,7 +68,7 @@ docker compose up --build -d --wait
   停用帳號回傳 403；Google 拒絕授權回傳 400；token 驗證失敗回傳 401；
   上游連線失敗回傳 502。驗證失敗不建立身份資料，錯誤不包含 token 或 secret。
 
-本版不包含 Argus OAuth / OIDC Server、Browser Session、Redis 或 SSO 功能。
+本版不包含 Argus OAuth / OIDC Server 或 SSO 功能。
 
 ## 測試
 
