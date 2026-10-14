@@ -12,5 +12,7 @@ OIDC Provider 時，provider 必須能區分其 issuer。Email 的 UNIQUE 僅為
 遷移會拒絕回復，避免遺失身份資料。`updated_at` 的自動更新由 SQLAlchemy
 處理，直接 SQL 更新時需自行設定。
 
-PostgreSQL 整合測試：安裝 pytest 並將 `TEST_DATABASE_URL` 指向專用空白測試資料庫，
-再執行 `python -m pytest -q`。測試會升級、回復及清除該資料庫的 schema。
+PostgreSQL 整合測試：安裝 `requirements-dev.txt` 並將 `TEST_DATABASE_URL` 指向專用
+空白測試資料庫，再執行 `python -m pytest tests/test_identity_model.py -q`。
+測試會升級、回復及清除該資料庫的 schema。執行完整測試時還需設定
+`TEST_REDIS_URL`，請參閱 [development.md](development.md)。

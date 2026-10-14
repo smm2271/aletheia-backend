@@ -11,6 +11,8 @@ def database(monkeypatch):
     if not url:
         pytest.skip("Set TEST_DATABASE_URL to a dedicated empty PostgreSQL database")
     monkeypatch.setenv("DATABASE_URL", url)
+    if redis_url := os.getenv("TEST_REDIS_URL"):
+        monkeypatch.setenv("REDIS_URL", redis_url)
     engine = create_engine(url)
     assert not inspect(engine).get_table_names(), "Tests require an empty database"
     config = Config("alembic.ini")

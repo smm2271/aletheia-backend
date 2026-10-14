@@ -1,4 +1,4 @@
-name: PostgreSQL identity tests
+name: Backend integration tests
 
 on: [push, pull_request]
 
@@ -9,6 +9,15 @@ jobs:
   test:
     runs-on: ubuntu-latest
     services:
+      redis:
+        image: redis:8-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+        ports:
+          - 6379:6379
       postgres:
         image: postgres:18
         env:
@@ -24,6 +33,7 @@ jobs:
           --health-retries 10
     env:
       TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/aletheia_test
+      TEST_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -44,6 +54,8 @@ jobs:
       - run: |
           curl --fail http://localhost:8000/health
           curl --fail http://localhost:8000/health/db
+          curl --fail http://localhost:8000/health/redis
+          docker compose exec -T backend python -m redis_connection
           docker compose exec -T backend python -m alembic current
           docker compose exec -T backend python -m alembic check
       - name: Verify database outage readiness
@@ -52,6 +64,15 @@ jobs:
           test "$(curl -s -o /tmp/readiness.json -w '%{http_code}' http://localhost:8000/health/db)" = "503"
           curl --fail http://localhost:8000/health
           docker compose up -d --wait --wait-timeout 180
+      - name: Verify Redis outage and recovery
+        run: |
+          docker compose exec -T redis redis-cli SET ci:transient-check temporary EX 60
+          docker compose stop redis
+          test "$(curl -s -o /tmp/redis-readiness.json -w '%{http_code}' http://localhost:8000/health/redis)" = "503"
+          curl --fail http://localhost:8000/health
+          docker compose up -d --wait --wait-timeout 180
+          test "$(docker compose exec -T redis redis-cli EXISTS ci:transient-check)" = "0"
+          curl --fail http://localhost:8000/health/redis
       - name: Verify persistent database volume
         run: |
           docker compose exec -T db psql -U aletheia -d aletheia -v ON_ERROR_STOP=1 -c "CREATE TABLE compose_smoke (value integer); INSERT INTO compose_smoke VALUES (42);"
