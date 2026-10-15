@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -13,6 +14,7 @@ from models import QRCredential, SSOClient, User
 from qr import verification
 from qr.tokens import TOKEN_TYPE
 from qr.verification import SCOPE
+from qr.nonces import NONCE_NAMESPACE, generate_nonce
 from signing_keys import KeyManagementError
 from test_browser_session import login
 from test_google_oauth import callback, flow, signing_key, start
@@ -39,13 +41,25 @@ def scanner(oidc_flow):
     owner_id = uuid.UUID(response.json()["user"]["id"])
     response = server.client.post("/api/v1/qr/credentials", headers={"Origin": "http://localhost"})
     assert response.status_code == 200
-    return server, scanner_id, owner_id, tokens, response.json()["token"]
+    server.verification_nonce_keys = set()
+    try:
+        yield server, scanner_id, owner_id, tokens, response.json()["token"]
+    finally:
+        if server.verification_nonce_keys:
+            server.store.delete(*server.verification_nonce_keys)
+
+
+def payload(scanner, token):
+    nonce = generate_nonce()
+    key = f"{NONCE_NAMESPACE}:{hashlib.sha256(b'consumer').hexdigest()}:{hashlib.sha256(nonce.encode()).hexdigest()}"
+    scanner[0].verification_nonce_keys.add(key)
+    return {"token": token, "nonce": nonce}
 
 
 def verify(scanner, token=None, access=None, **kwargs):
     server, _, _, tokens, qr = scanner
     response = server.client.post(PATH, headers={"Authorization": "Bearer " + (access or tokens.access_token)},
-                                  json={"token": qr if token is None else token}, **kwargs)
+                                  json=payload(scanner, qr if token is None else token), **kwargs)
     assert response.headers["cache-control"] == "no-store"
     return response
 
@@ -67,7 +81,7 @@ def test_valid_response_is_minimal_and_does_not_authorize_entry(scanner):
     assert response.status_code == 200 and response.json() == {"valid": True}
     assert response.headers["pragma"] == "no-cache"
     assert qr not in response.text and str(owner_id) not in response.text
-    assert verify(scanner).json() == {"valid": True}  # Nonce policy is added separately.
+    assert verify(scanner).json() == {"valid": True}  # Different transactions use fresh nonces.
     operation = server.client.get("/openapi.json").json()["paths"][PATH]["post"]
     assert "HTTPBearer" in operation["security"][0]
     assert {"200", "400", "401", "403", "422", "503"}.issubset(operation["responses"])
@@ -77,7 +91,7 @@ def test_valid_response_is_minimal_and_does_not_authorize_entry(scanner):
 @pytest.mark.parametrize("authorization", [None, "Basic secret", "Bearer", "Bearer invalid", "Bearer one two"])
 def test_browser_session_is_not_scanner_authorization(scanner, authorization):
     server, *_, qr = scanner
-    response = server.client.post(PATH, json={"token": qr},
+    response = server.client.post(PATH, json=payload(scanner, qr),
                                   headers={"Authorization": authorization} if authorization else {})
     assert response.status_code == 401
     assert response.headers["cache-control"] == "no-store"
@@ -187,6 +201,8 @@ def test_current_mapping_owner_and_metadata_are_required(scanner, change):
                                   {"token": "sensitive", "user_id": "private"}, None])
 def test_request_validation_is_no_store_and_does_not_reflect_credentials(scanner, body):
     server = scanner[0]
+    if isinstance(body, dict):
+        body = {**body, "nonce": generate_nonce()}
     response = server.client.post(PATH, headers={"Authorization": "Bearer " + scanner[3].access_token}, json=body)
     assert response.status_code == 422
     assert response.headers["cache-control"] == "no-store"

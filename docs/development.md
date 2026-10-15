@@ -122,6 +122,8 @@ Argus Token Endpoint 遵循 OAuth 2.0 與 PKCE S256 規範，JWT 簽發與驗證
 [oidc-demo.md](oidc-demo.md)，學生資格資料與 Scope 請參閱 [student-eligibility.md](student-eligibility.md)。
 靜態 QR 格式與圖片編碼請參閱 [static-qr.md](static-qr.md)，本人簽發 API 與重複簽發
 政策請參閱 [qr-api.md](qr-api.md)。第六週整合測試證據整理於 [week6-test-report.md](week6-test-report.md)。
+受授權保護的 QR 驗證請參閱 [qr-verification.md](qr-verification.md)，Nonce 契約與完整
+檢查順序請參閱 [qr-nonces.md](qr-nonces.md)、[qr-verification-flow.md](qr-verification-flow.md)。
 
 本機整合測試先安裝 `requirements-dev.txt`，設定 `TEST_DATABASE_URL` 為專用
 空白 PostgreSQL 資料庫、`TEST_REDIS_URL` 為專用 Redis database，再執行

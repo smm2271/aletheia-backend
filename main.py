@@ -11,6 +11,7 @@ from auth.session import SessionError, clear_session_cookie
 from sso.jwt import JWTIssuer, JWTSettings
 from signing_keys import FileKeyProvider
 from qr.tokens import QRIssuer, QRSettings
+from qr.nonces import NonceSettings
 
 from routes import router
 from routes.auth import router as auth_router
@@ -41,6 +42,7 @@ async def lifespan(app: FastAPI):
             keys = FileKeyProvider(os.environ["SIGNING_KEYS_FILE"])
         app.state.token_issuer = JWTIssuer(JWTSettings.from_environment(), keys) if keys is not None else None
         app.state.qr_issuer = QRIssuer(QRSettings.from_environment(app.state.token_issuer.settings.issuer), keys) if keys is not None else None
+        app.state.qr_nonce_settings = NonceSettings.from_environment()
         yield
     finally:
         try:
@@ -54,6 +56,7 @@ app = FastAPI(title="Argus API", lifespan=lifespan)
 app.state.token_issuer = None
 app.state.sso_key_provider = None
 app.state.qr_issuer = None
+app.state.qr_nonce_settings = None
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(session_router)

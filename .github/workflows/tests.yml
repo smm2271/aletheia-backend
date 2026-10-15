@@ -34,6 +34,7 @@ jobs:
     env:
       TEST_DATABASE_URL: postgresql+psycopg://postgres:postgres@localhost:5432/aletheia_test
       TEST_REDIS_URL: redis://localhost:6379/0
+      TEST_QR_NONCE_REDIS_URL: redis://localhost:6379/0
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -57,6 +58,10 @@ jobs:
         run: |
           set -o pipefail
           python tests/smoke_oidc.py 2>&1 | tee test-results/smoke-oidc.log
+      - name: Run live HTTP QR verification smoke test
+        run: |
+          set -o pipefail
+          python tests/smoke_qr_verification.py 2>&1 | tee test-results/smoke-qr-verification.log
       - name: Upload test evidence
         if: always()
         uses: actions/upload-artifact@v4

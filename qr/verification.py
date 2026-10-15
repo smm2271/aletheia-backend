@@ -23,6 +23,7 @@ SCOPE = "qr:static:verify"
 class VerificationRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     token: str = Field(min_length=1, max_length=MAX_TOKEN_BYTES)
+    nonce: str = Field(min_length=1, max_length=64)
 
 
 class VerificationResponse(BaseModel):

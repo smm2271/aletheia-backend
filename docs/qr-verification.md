@@ -1,6 +1,7 @@
 # Online static QR verification
 
-`POST /api/v1/qr/static/verify` accepts `{"token": "<signed QR token>"}`.
+`POST /api/v1/qr/static/verify` accepts
+`{"token": "<signed QR token>", "nonce": "v1.<unix_seconds>.<random256bit_base64url>"}`.
 The body accepts no extra properties, the token must contain 1–1024 characters,
 and query parameters are rejected. Responses use `Cache-Control: no-store`.
 Validation errors do not echo submitted credentials.
@@ -28,12 +29,13 @@ it discloses no credential ID, user ID, profile or eligibility.
 
 | Status | Meaning |
 | --- | --- |
-| 200 | The credential currently passes cryptographic and online mapping checks. |
-| 400 | Invalid QR credential, or unsupported query parameters. |
+| 200 | The credential passes cryptographic and current mapping checks, and the transaction nonce was atomically consumed. |
+| 400 | Invalid QR credential, malformed/expired/future nonce, or unsupported query parameters. |
 | 401 | Scanner Access Token is missing/invalid, or scanner/client is no longer enabled. |
 | 403 | Access Token scope is missing, or the client no longer permits that scope. |
+| 409 | The same client has already consumed this transaction nonce. |
 | 422 | Invalid request body; credential input is not reflected. |
-| 503 | Signing keys, configuration or database is unavailable. |
+| 503 | Signing keys, configuration, database or nonce store is unavailable. |
 
 Error responses contain only a generic `detail` string. Authentication errors
 also include the appropriate `WWW-Authenticate: Bearer` challenge. Neither QR
@@ -41,5 +43,8 @@ tokens nor scanner Access Tokens should be placed in URLs or logs.
 
 This endpoint verifies a credential; it does not authorize admission or establish
 student eligibility. Offline signature validation cannot immediately observe
-database changes. This implementation does not yet consume a one-time request
-nonce: replay prevention belongs to the subsequent nonce integration.
+database changes. The complete flow requires a fresh client-scoped transaction nonce,
+consumed atomically only after authorization and all QR checks pass. See
+[qr-nonces.md](qr-nonces.md) and [qr-verification-flow.md](qr-verification-flow.md).
+A copied static QR can still be submitted with a new nonce; this mechanism does
+not establish physical presence or prevent screenshots from being forwarded.
