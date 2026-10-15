@@ -124,10 +124,17 @@ Argus Token Endpoint 遵循 OAuth 2.0 與 PKCE S256 規範，JWT 簽發與驗證
 政策請參閱 [qr-api.md](qr-api.md)。第六週整合測試證據整理於 [week6-test-report.md](week6-test-report.md)。
 受授權保護的 QR 驗證請參閱 [qr-verification.md](qr-verification.md)，Nonce 契約與完整
 檢查順序請參閱 [qr-nonces.md](qr-nonces.md)、[qr-verification-flow.md](qr-verification-flow.md)。
+Swagger 操作、第七至八週成果、覆蓋率範圍與驗收證據請參閱
+[week8-qr-report.md](week8-qr-report.md)。
 
 本機整合測試先安裝 `requirements-dev.txt`，設定 `TEST_DATABASE_URL` 為專用
-空白 PostgreSQL 資料庫、`TEST_REDIS_URL` 為專用 Redis database，再執行
-`python -m pytest -q`。測試只建立與清除自己的 Redis key，不執行 FLUSHDB。
+空白 PostgreSQL 資料庫、`TEST_REDIS_URL` 為專用 Redis instance，並將
+`TEST_QR_NONCE_REDIS_URL` 設為相同 URL，再執行 `python -m pytest -q`。
+使用 `python -m pytest -q --cov --cov-report=term-missing --cov-report=html:test-results/htmlcov
+--cov-report=xml:test-results/coverage.xml --cov-report=json:test-results/coverage.json`
+產生分支與行覆蓋率。完整指令與排除範圍見第八週報告。HTTP smoke 的 `CLIENT PAUSE`
+會影響整個 Redis instance；不能只用不同 database index 隔離。
+測試只建立與清除自己的 Redis key，不執行 FLUSHDB。
 
 參考：[Compose 啟動順序](https://docs.docker.com/compose/how-tos/startup-order/)、
 [PostgreSQL 官方映像](https://hub.docker.com/_/postgres)。
