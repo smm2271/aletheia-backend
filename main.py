@@ -22,6 +22,7 @@ from routes.token import router as token_router
 from routes.oidc import router as oidc_router
 from routes.student import router as student_router
 from routes.qr import router as qr_router
+from routes.qr_verification import router as qr_verification_router
 
 
 @asynccontextmanager
@@ -63,6 +64,7 @@ app.include_router(token_router)
 app.include_router(oidc_router)
 app.include_router(student_router)
 app.include_router(qr_router)
+app.include_router(qr_verification_router)
 
 
 @app.exception_handler(SessionError)
