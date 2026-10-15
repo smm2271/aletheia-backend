@@ -1,7 +1,8 @@
 # SSO Authorization Endpoint
 
 `GET /authorize` 支援 response_type=code，client_id、redirect_uri、scope 必填，
-state / nonce 可選。要求先驗證已註冊且啟用的 Client、Redirect URI 完全相符，以及
+state / nonce 可選；nonce 若提供，長度須為 1 至 512 個字元，空值會在發碼前回傳 400。
+要求先驗證已註冊且啟用的 Client、Redirect URI 完全相符，以及
 所有 Scope 均在 allowlist 內；未知 / 停用 Client、URI / Scope 不符及不支援的
 response_type 都在 Argus 本地回傳 400，不導向未信任的 URI。
 

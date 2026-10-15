@@ -12,6 +12,8 @@ from main import app
 from models import ClientType, SSOClient, TrustLevel, User
 from sso.authorization import CODE_PREFIX, context_fingerprint
 from sso.token import TokenResponse
+from sso.jwt import JWTValidator
+from test_jwt import MemoryKeys
 from test_authorization import (
     TEST_CHALLENGE,
     TEST_VERIFIER,
@@ -60,6 +62,46 @@ def post_token(client, data: dict, headers: dict | None = None):
     if headers:
         req_headers.update(headers)
     return client.post("/token", data=data, headers=req_headers)
+
+
+@pytest.mark.parametrize("openid", [True, False])
+def test_real_jwt_exchange_with_startup_provider(request, monkeypatch, openid):
+    keys = MemoryKeys()
+    monkeypatch.setattr(app.state, "sso_key_provider", keys)
+    monkeypatch.setenv("SSO_ISSUER", "https://argus.example")
+    monkeypatch.setenv("SSO_ACCESS_AUDIENCE", "argus-api")
+    monkeypatch.setenv("SSO_ACCESS_TOKEN_TTL_SECONDS", "300")
+    monkeypatch.setenv("SSO_ID_TOKEN_TTL_SECONDS", "120")
+    auth_flow = request.getfixturevalue("auth_flow")
+    login_response, _ = login(auth_flow)
+    params = register(auth_flow)
+    params["nonce"] = "client-request-nonce"
+    if not openid:
+        params["scope"] = "profile"
+    code = issued_code(authorize(auth_flow, params))
+    cookies_before = dict(auth_flow.client.cookies)
+    data = {
+        "grant_type": "authorization_code", "code": code,
+        "redirect_uri": params["redirect_uri"], "code_verifier": TEST_VERIFIER,
+        "client_id": params["client_id"], "client_secret": "secret",
+    }
+    response = post_token(auth_flow.client, data)
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    assert response.headers["pragma"] == "no-cache"
+    assert "set-cookie" not in response.headers
+    validator = JWTValidator(app.state.token_issuer.settings, keys)
+    body = response.json()
+    access = validator.validate_access_token(body["access_token"], audience="argus-api", required_scopes=("profile",))
+    assert access["sub"] == login_response.json()["user"]["id"]
+    if openid:
+        identity = validator.validate_id_token(body["id_token"], client_id=params["client_id"], nonce=params["nonce"])
+        assert identity["sub"] == access["sub"]
+    else:
+        assert "id_token" not in body
+    assert dict(auth_flow.client.cookies) == cookies_before
+    assert auth_flow.client.get("/auth/me").status_code == 200
+    assert post_token(auth_flow.client, data).json()["error"] == "invalid_grant"
 
 
 def test_token_endpoint_without_configured_issuer_returns_503(auth_flow, monkeypatch):
