@@ -5,7 +5,8 @@ from fastapi.routing import APIRoute
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 
-from qr.verification import VerificationRequest, VerificationResponse, verify_for_client
+from qr.verification import VerificationRequest, VerificationResponse
+from qr.verification_flow import verify_with_nonce
 
 
 class NoStoreRoute(APIRoute):
@@ -40,14 +41,17 @@ router = APIRouter(tags=["Static QR verification"], route_class=NoStoreRoute)
              summary="Verify a current static QR credential",
              description=("Requires an SSO Access Token for the configured resource audience with "
                           "qr:static:verify scope and a currently enabled user and client. "
-                          "Checks signature and current credential mapping. Does not authorize admission."),
+                          "Checks signature and current credential mapping, then atomically consumes a required "
+                          "client-scoped transaction nonce. A new nonce permits another scan of the same QR. "
+                          "Does not authorize admission or prevent copying a static QR."),
              responses={code: {"model": VerificationError, "description": description} for code, description in (
-                 (400, "Invalid QR credential or unsupported query parameters"),
+                 (400, "Invalid QR credential, invalid or expired nonce, or unsupported query parameters"),
                  (401, "Invalid Access Token or disabled scanner/client"),
                  (403, "Required scope missing or no longer granted to client"),
+                 (409, "Verification request nonce already consumed"),
                  (422, "Invalid request body"), (503, "Verification keys or stores unavailable"))})
 async def verify_credential(request: Request, body: VerificationRequest):
     if request.query_params:
         raise HTTPException(400, "Query parameters are unsupported")
-    await verify_for_client(request, body.token)
+    await verify_with_nonce(request, body.token, body.nonce)
     return VerificationResponse()
