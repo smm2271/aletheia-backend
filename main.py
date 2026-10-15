@@ -7,6 +7,7 @@ from sqlalchemy import text
 from database import create_database_engine
 from redis_connection import create_redis_client
 from auth.session import SessionError, clear_session_cookie
+from sso.jwt import JWTIssuer, JWTSettings
 
 from routes import router
 from routes.auth import router as auth_router
@@ -28,7 +29,8 @@ async def lifespan(app: FastAPI):
         redis_client = create_redis_client()
         await redis_client.ping()
         app.state.redis_client = redis_client
-        app.state.token_issuer = None
+        keys = app.state.sso_key_provider
+        app.state.token_issuer = JWTIssuer(JWTSettings.from_environment(), keys) if keys is not None else None
         yield
     finally:
         try:
@@ -40,6 +42,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Argus API", lifespan=lifespan)
 app.state.token_issuer = None
+app.state.sso_key_provider = None
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(session_router)
