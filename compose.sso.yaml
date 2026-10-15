@@ -1,0 +1,10 @@
+# Optional SSO key mount. Keep private keys outside the image and source control.
+services:
+  backend:
+    environment:
+      SIGNING_KEYS_FILE: /run/argus-keys/keys.json
+    volumes:
+      - type: bind
+        source: ${SIGNING_KEYS_DIRECTORY:?Set an absolute protected key directory}
+        target: /run/argus-keys
+        read_only: true

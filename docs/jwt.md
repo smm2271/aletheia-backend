@@ -17,9 +17,8 @@ Issuer 必須使用 HTTPS；僅 loopback 開發環境允許 HTTP。兩種 TTL �
 1～3600 秒。Audience 不從授權請求或 Token Header 推導；Client ID 僅作為 ID
 Token 的 audience。目前不支援 Client 自選 Resource，也不會向其他 API 簽發 Token。
 
-金鑰管理是 [issue #16](https://github.com/smm2271/aletheia-backend/issues/16)
-的工作；#15 內文的 #12 是舊編號。此變更定義以下介面，沒有產生、載入或保存
-正式私鑰，也沒有實作 JWKS Endpoint：
+金鑰管理由 `signing_keys.py` 實作，設定與輪替請參閱 [signing-keys.md](signing-keys.md)。
+Token Service 僅依賴以下介面，不自行管理私鑰檔案：
 
 ```python
 class SSOKeyProvider:
@@ -42,7 +41,7 @@ app.state.sso_key_provider = provider  # 由金鑰管理模組建立
 啟動時會依環境設定建立 `app.state.token_issuer`。已有 Provider 但設定錯誤時
 啟動失敗；尚未注入 Provider 時其他服務可啟動，`/token` 保持回傳 OAuth
 `temporarily_unavailable` / HTTP 503。既有 Code 仍會被消耗，Client 需重新授權。
-因此，單純設定環境變數尚不能在預設 Compose 部署中啟用簽發；須先接上 #16。
+也可設定 `SIGNING_KEYS_FILE` 載入已部署的受保護金鑰；Docker 掛載方式見金鑰文件。
 也可直接以 `JWTIssuer(settings, provider)` 與 `JWTValidator(settings, provider)`
 組裝服務。僅負責驗證的 Client／Resource Server 不需要實作 `signing_key`。
 
@@ -104,4 +103,4 @@ ID Token 僅供 Client 確認登入，不能作為 API Bearer Token。即使兩�
 格式與驗證參考 [OIDC Core](https://openid.net/specs/openid-connect-core-1_0.html#IDToken)、
 [JWT Access Token Profile](https://www.rfc-editor.org/rfc/rfc9068.html) 與
 [PyJWT API](https://pyjwt.readthedocs.io/en/stable/api.html)。此處未宣告完整 OIDC Provider
-相容性，Discovery、公開 JWKS 與其他 OIDC 功能另行實作。
+相容性；Discovery、公開 JWKS 與獨立示範 Client 請參閱 [oidc-demo.md](oidc-demo.md)。

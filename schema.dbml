@@ -108,3 +108,26 @@ Table sso_clients {
   created_at timestamptz [not null, default: `now()`]
   updated_at timestamptz [not null, default: `now()`]
 }
+
+Enum eligibility_status {
+  eligible
+  ineligible
+  unknown
+}
+
+Enum eligibility_verification_status {
+  test
+  unverified
+  verified
+}
+
+Table student_eligibility {
+  user_id uuid [pk, not null]
+  status eligibility_status [not null]
+  source varchar(128) [not null]
+  verification_status eligibility_verification_status [not null]
+  updated_at timestamptz [not null]
+  valid_until timestamptz
+}
+
+Ref: student_eligibility.user_id > users.id [delete: cascade]

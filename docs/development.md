@@ -116,8 +116,10 @@ Google 登入與可修改的校園身份規則請參閱 [google-oauth.md](google
 管理權限、Client 註冊、授權流程與 Token 交換請參閱 [admin.md](admin.md)、
 [sso-clients.md](sso-clients.md) 與 [authorization.md](authorization.md)。
 Argus Token Endpoint 遵循 OAuth 2.0 與 PKCE S256 規範，JWT 簽發與驗證設定請參閱
-[jwt.md](jwt.md)。尚未接入 #16 的 SSO Key Provider 時，合法換碼會回傳 503；
+[jwt.md](jwt.md)。尚未配置 SSO Key Provider 或 `SIGNING_KEYS_FILE` 時，合法換碼會回傳 503；
 測試環境涵蓋 MockTokenIssuer 與注入測試金鑰後的真實 Ed25519 JWT 交換。
+金鑰載入／輪替請參閱 [signing-keys.md](signing-keys.md)，完整 Callback 示範請參閱
+[oidc-demo.md](oidc-demo.md)，學生資格資料與 Scope 請參閱 [student-eligibility.md](student-eligibility.md)。
 
 本機整合測試先安裝 `requirements-dev.txt`，設定 `TEST_DATABASE_URL` 為專用
 空白 PostgreSQL 資料庫、`TEST_REDIS_URL` 為專用 Redis database，再執行

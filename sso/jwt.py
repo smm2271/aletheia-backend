@@ -12,6 +12,7 @@ import jwt
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey, Ed25519PublicKey
 
 from models import SSOClient, User
+from signing_keys import KeyManagementError
 from sso.clients import validate_scopes
 from sso.token import TokenResponse
 
@@ -75,10 +76,12 @@ class JWTIssuer:
             raise ValueError("Invalid token grant")
         if nonce is not None and (not isinstance(nonce, str) or not nonce):
             raise ValueError("Invalid nonce")
+        # Timestamp before taking the signing snapshot so an in-flight issuance
+        # cannot extend an old key's TTL beyond its rotation retention deadline.
+        now = int(time.time())
         kid, key = self.keys.signing_key("sso")
         if not isinstance(kid, str) or not kid or not isinstance(key, Ed25519PrivateKey):
             raise ValueError("An active SSO Ed25519 signing key is required")
-        now = int(time.time())
         common = {"iss": self.settings.issuer, "sub": subject, "iat": now}
 
         def sign(claims, typ):
@@ -157,5 +160,7 @@ class JWTValidator:
             if str(uuid.UUID(claims["sub"])) != claims["sub"]:
                 raise ValueError()
             return claims
+        except KeyManagementError:
+            raise
         except (jwt.PyJWTError, ValueError, TypeError, KeyError, AttributeError, OverflowError):
             raise JWTValidationError("Invalid SSO token") from None
