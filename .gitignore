@@ -6,3 +6,5 @@ __pycache__/
 !.env.example
 .venv/
 secrets/
+test-results/
+compose-results/

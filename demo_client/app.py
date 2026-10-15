@@ -18,6 +18,7 @@ from redis.exceptions import RedisError
 from signing_keys import raw_key
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from sso.jwt import JWTSettings, JWTValidator
+from sso.clients import validate_scopes
 
 FLOW_COOKIE = "argus_demo_flow"
 SESSION_COOKIE = "argus_demo_session"
@@ -34,10 +35,14 @@ class ClientSettings:
     client_secret: str = field(repr=False)
     origin: str = "http://127.0.0.1:8001"
     redis_url: str = field(default="redis://localhost:6380/1", repr=False)
+    scopes: tuple[str, ...] = ("openid",)
 
     def __post_init__(self):
         JWTSettings(self.issuer, "unused-by-id-token-validation")
         JWTSettings(self.origin, "unused")
+        validate_scopes(list(self.scopes))
+        if "openid" not in self.scopes:
+            raise ValueError("OIDC client requires the openid scope")
         uri = urlsplit(self.origin)
         uri.port
         if uri.path or not self.client_id or not self.client_secret or self.origin == self.issuer.rstrip("/"):
@@ -57,7 +62,8 @@ class ClientSettings:
     @classmethod
     def from_environment(cls):
         return cls(os.environ["DEMO_ISSUER"], os.environ["DEMO_CLIENT_ID"], os.environ["DEMO_CLIENT_SECRET"],
-                   os.getenv("DEMO_PUBLIC_ORIGIN", "http://127.0.0.1:8001"), os.environ["DEMO_REDIS_URL"])
+                   os.getenv("DEMO_PUBLIC_ORIGIN", "http://127.0.0.1:8001"), os.environ["DEMO_REDIS_URL"],
+                   tuple(os.getenv("DEMO_SCOPES", "openid").split(" ")))
 
 
 def fingerprint(token):
@@ -145,7 +151,7 @@ def create_app(settings: ClientSettings | None = None) -> FastAPI:
         challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode("ascii")).digest()).rstrip(b"=").decode()
         response = RedirectResponse(document["authorization_endpoint"] + "?" + urlencode({
             "response_type": "code", "client_id": config.client_id, "redirect_uri": config.callback,
-            "scope": "openid", "state": state, "nonce": nonce,
+            "scope": " ".join(config.scopes), "state": state, "nonce": nonce,
             "code_challenge": challenge, "code_challenge_method": "S256",
         }), status_code=302)
         response.set_cookie(FLOW_COOKIE, browser, max_age=FLOW_TTL, httponly=True, secure=config.secure, samesite="lax")
