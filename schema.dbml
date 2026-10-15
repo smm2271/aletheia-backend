@@ -131,3 +131,13 @@ Table student_eligibility {
 }
 
 Ref: student_eligibility.user_id > users.id [delete: cascade]
+
+Table qr_credentials {
+  user_id uuid [pk, not null]
+  credential_id varchar(43) [unique, not null]
+  token text [not null, note: 'Signed bearer credential; keep private and out of logs']
+  issued_at timestamptz [not null]
+  expires_at timestamptz [not null]
+}
+
+Ref: qr_credentials.user_id > users.id [delete: cascade]
