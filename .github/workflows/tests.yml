@@ -53,7 +53,7 @@ jobs:
       - name: Run automated tests
         run: |
           set -o pipefail
-          python -m pytest -q --junitxml=test-results/pytest.xml 2>&1 | tee test-results/pytest.log
+          python -m pytest -q --cov --cov-config=.coveragerc --cov-report=term-missing --cov-report=xml:test-results/coverage.xml --cov-report=html:test-results/htmlcov --cov-report=json:test-results/coverage.json --junitxml=test-results/pytest.xml 2>&1 | tee test-results/pytest.log
       - name: Run live HTTP OIDC smoke test
         run: |
           set -o pipefail

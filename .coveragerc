@@ -1,0 +1,21 @@
+[run]
+branch = True
+relative_files = True
+source =
+    admin
+    auth
+    demo_client
+    models
+    qr
+    routes
+    sso
+    student
+    database
+    main
+    redis_connection
+    signing_keys
+
+[report]
+show_missing = True
+skip_empty = True
+precision = 2

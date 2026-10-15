@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Body, Depends, HTTPException, Request, Response
 from fastapi.security import APIKeyCookie
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy.exc import SQLAlchemyError
@@ -35,13 +35,35 @@ async def credential_user(request: Request) -> User:
              description=("Requires a browser session and the exact configured Origin. Omit the body or send {}. "
                           "No query parameters or subject selection are accepted. Returns the same signed token "
                           "until expiry, including across signing-key rotation; expires_at is authoritative. "
-                          "This endpoint does not validate entry eligibility or authorize admission."),
+                          "This endpoint does not validate entry eligibility or authorize admission. "
+                          "In Swagger, log in through /auth/google/login in the same browser first; browser JavaScript "
+                          "cannot set a Cookie header using Authorize. Serve /docs from SESSION_PUBLIC_ORIGIN so the "
+                          "browser sends the session cookie and matching Origin. Examples are synthetic, not usable credentials."),
              dependencies=[Depends(APIKeyCookie(name=COOKIE_NAME, auto_error=False))],
-             responses={code: {"model": CredentialError, "description": description} for code, description in (
-                 (400, "Only self-issuance is supported"), (401, "Browser session missing or user disabled"),
-                 (403, "Origin does not match"), (409, "Existing credential is unavailable until expiry"),
-                 (503, "Signing keys or database unavailable"))})
-async def issue_credential(request: Request, response: Response, body: CredentialRequest | None = None,
+             responses={
+                 200: {"description": "Current user's reusable credential; no-store. Example token is a placeholder.",
+                       "content": {"application/json": {"example": {
+                           "token": "<signed-static-qr-jwt>", "credential_id": "A" * 43, "format_version": 1,
+                           "issued_at": "2026-10-15T00:00:00Z", "expires_at": "2026-10-15T00:10:00Z"}}}},
+                 **{code: {"model": CredentialError, "description": description,
+                           "content": {"application/json": {"example": {"detail": detail}}}}
+                    for code, description, detail in (
+                        (400, "Query parameters are unsupported", "Only the current browser user may obtain a credential"),
+                        (401, "Browser session missing/expired or user deleted/disabled", "Unauthenticated"),
+                        (403, "Origin missing or does not exactly match SESSION_PUBLIC_ORIGIN", "Invalid request origin"),
+                        (409, "Existing credential unavailable until expiry", "Current QR credential is unavailable; retry after its expiry"),
+                        (503, "QR configuration, keys, session store or database unavailable", "Credential store unavailable"))}},
+             openapi_extra={
+                 "parameters": [{"in": "header", "name": "Origin", "required": True,
+                                 "description": "Exact SESSION_PUBLIC_ORIGIN; browsers set this automatically for POST.",
+                                 "schema": {"type": "string"}, "example": "http://localhost:8000"}],
+                 "responses": {"422": {"description": "Invalid body, including extra properties. FastAPI validation-error schema.",
+                                         "content": {"application/json": {"example": {"detail": [
+                                             {"type": "extra_forbidden", "loc": ["body", "user_id"],
+                                              "msg": "Extra inputs are not permitted", "input": "example"}]}}}}}})
+async def issue_credential(request: Request, response: Response,
+                           body: CredentialRequest | None = Body(default=None, openapi_examples={
+                               "self": {"summary": "Current browser user (body can also be omitted)", "value": {}}}),
                            user: User = Depends(credential_user)):
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"

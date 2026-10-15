@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.routing import APIRoute
@@ -43,14 +43,28 @@ router = APIRouter(tags=["Static QR verification"], route_class=NoStoreRoute)
                           "qr:static:verify scope and a currently enabled user and client. "
                           "Checks signature and current credential mapping, then atomically consumes a required "
                           "client-scoped transaction nonce. A new nonce permits another scan of the same QR. "
-                          "Does not authorize admission or prevent copying a static QR."),
-             responses={code: {"model": VerificationError, "description": description} for code, description in (
-                 (400, "Invalid QR credential, invalid or expired nonce, or unsupported query parameters"),
-                 (401, "Invalid Access Token or disabled scanner/client"),
-                 (403, "Required scope missing or no longer granted to client"),
-                 (409, "Verification request nonce already consumed"),
-                 (422, "Invalid request body"), (503, "Verification keys or stores unavailable"))})
-async def verify_credential(request: Request, body: VerificationRequest):
+                          "Nonce TTL is QR_NONCE_TTL_SECONDS (default 300, range 1-600 seconds); clocks must be synchronized. "
+                          "Bearer audience is SSO_ACCESS_AUDIENCE (default argus-api). In Authorize paste only the "
+                          "Access Token; cookies, ID Tokens and QR tokens cannot authorize this operation. "
+                          "A Redis timeout may have consumed the nonce: start a new transaction with a fresh nonce. "
+                          "All responses are no-store. Does not authorize admission or prevent copying a static QR. "
+                          "Example token is a placeholder and example nonce is stale; replace both before Try it out."),
+             responses={
+                 200: {"description": "Current QR verified and nonce claimed; no identity or eligibility disclosed.",
+                       "content": {"application/json": {"example": {"valid": True}}}},
+                 **{code: {"model": VerificationError, "description": description,
+                           "content": {"application/json": {"example": {"detail": detail}}}}
+                    for code, description, detail in (
+                        (400, "Invalid QR, malformed/expired/future nonce or query parameters", "Invalid QR credential"),
+                        (401, "Invalid/missing Access Token or deleted/disabled scanner/client", "Invalid access token"),
+                        (403, "Required scope missing or no longer granted to client", "Required scope missing"),
+                        (409, "This client already consumed the nonce, even for another QR", "Verification request already consumed"),
+                        (422, "Invalid body; submitted credential is not echoed", "Invalid verification request"),
+                        (503, "Verification configuration, keys, database or Redis unavailable; fails closed", "Verification request store unavailable"))}})
+async def verify_credential(request: Request, body: VerificationRequest = Body(openapi_examples={
+    "scan": {"summary": "Synthetic example: replace token and generate a fresh nonce",
+             "value": {"token": "<signed-static-qr-jwt>", "nonce": "v1.1792022400." + "A" * 43}},
+})):
     if request.query_params:
         raise HTTPException(400, "Query parameters are unsupported")
     await verify_with_nonce(request, body.token, body.nonce)
