@@ -63,10 +63,11 @@ python -m signing_keys retire secrets/keys.json --kid OLD_KEY_ID
 所有 JWT 的最長允許 TTL（3600 秒）；期限未到不可退役。只支援單一管理者寫入，
 請序列化管理命令。寫入以同目錄暫存檔 + atomic replace 完成，讀者不會讀到半份資料。
 QR 輪替亦使用相同保留期限；未來 QR 長效憑證需在引入時調整獨立的保留政策。
+本次靜態 QR Token 的有效期上限同為 3600 秒，詳見 [static-qr.md](static-qr.md)。
 
 `GET /.well-known/jwks.json` 只分發 SSO Active / Verify Only 公鑰，格式為
 `kty=OKP`、`crv=Ed25519`、`x`、`kid`、`use=sig`、`alg=EdDSA`，不含 `d` 或 QR key。
 目前採 `Cache-Control: no-store`，示範 Client 每次 Callback 重新取得公鑰。
-QR key 已可簽章／驗證，尚未提供 QR 憑證或 QR 公鑰 API。
+QR key 用於獨立的靜態 QR 憑證；尚未提供 QR 公鑰 HTTP API，不能從 SSO JWKS 取得。
 
 參考：[RFC 8037](https://www.rfc-editor.org/rfc/rfc8037.html)。
