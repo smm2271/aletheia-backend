@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import os
 
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
@@ -8,6 +9,7 @@ from database import create_database_engine
 from redis_connection import create_redis_client
 from auth.session import SessionError, clear_session_cookie
 from sso.jwt import JWTIssuer, JWTSettings
+from signing_keys import FileKeyProvider
 
 from routes import router
 from routes.auth import router as auth_router
@@ -16,6 +18,8 @@ from routes.admin import router as admin_router
 from routes.clients import router as clients_router
 from routes.authorization import router as authorization_router
 from routes.token import router as token_router
+from routes.oidc import router as oidc_router
+from routes.student import router as student_router
 
 
 @asynccontextmanager
@@ -30,6 +34,8 @@ async def lifespan(app: FastAPI):
         await redis_client.ping()
         app.state.redis_client = redis_client
         keys = app.state.sso_key_provider
+        if keys is None and os.getenv("SIGNING_KEYS_FILE"):
+            keys = FileKeyProvider(os.environ["SIGNING_KEYS_FILE"])
         app.state.token_issuer = JWTIssuer(JWTSettings.from_environment(), keys) if keys is not None else None
         yield
     finally:
@@ -50,6 +56,8 @@ app.include_router(admin_router)
 app.include_router(clients_router)
 app.include_router(authorization_router)
 app.include_router(token_router)
+app.include_router(oidc_router)
+app.include_router(student_router)
 
 
 @app.exception_handler(SessionError)
