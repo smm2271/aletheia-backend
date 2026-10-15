@@ -6,6 +6,7 @@ provisions one authenticated browser session through the backend session service
 import asyncio
 import base64
 import hashlib
+from io import BytesIO
 import os
 import secrets
 import subprocess
@@ -19,6 +20,8 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import httpx
+import zxingcpp
+from PIL import Image
 from alembic import command
 from alembic.config import Config
 from sqlalchemy import inspect, text
@@ -29,7 +32,10 @@ from database import create_database_engine
 from models import Affiliation, ClientType, EligibilityStatus, SSOClient, StudentEligibility, TrustLevel, User, VerificationStatus
 from redis_connection import create_redis_client
 from signing_keys import KeyRing, SigningKey, save_key_file
+from signing_keys import FileKeyProvider
 from sso.clients import hash_secret
+from qr.encoding import encode_png
+from qr.tokens import QRSettings, QRValidator
 
 
 async def browser_session(user_id, token=None):
@@ -126,6 +132,17 @@ def main():
                 })
                 assert eligibility.status_code == 200
                 assert eligibility.json()["status"] == "eligible" and eligibility.json()["verified"] is False
+                credential_headers = {"Origin": issuer, "Cookie": COOKIE_NAME + "=" + token}
+                credential = browser.post(issuer + "/api/v1/qr/credentials", headers=credential_headers, json={})
+                assert credential.status_code == 200
+                assert credential.headers["cache-control"] == "no-store"
+                repeated = browser.post(issuer + "/api/v1/qr/credentials", headers=credential_headers)
+                assert repeated.json() == credential.json()
+                compact = credential.json()["token"]
+                decoded = zxingcpp.read_barcode(Image.open(BytesIO(encode_png(compact))))
+                assert decoded is not None and decoded.text == compact
+                qr_claims = QRValidator(QRSettings(issuer), FileKeyProvider(path)).validate(decoded.text)
+                assert qr_claims["cid"] == credential.json()["credential_id"] and "sub" not in qr_claims
                 assert browser.post(origin + "/logout", headers={"Origin": origin}).status_code == 204
                 assert browser.get(origin + "/me").status_code == 401
                 assert browser.get(issuer + "/auth/me", headers={"Cookie": COOKIE_NAME + "=" + token}).status_code == 200
@@ -134,6 +151,7 @@ def main():
                 process.wait(timeout=10)
             processes.clear()
         print("Live HTTP: Discovery, JWKS, OIDC callback, isolated client session and eligibility passed")
+        print("Live HTTP: self-issued static QR, repeat issuance, PNG / ZXing roundtrip and QR signature passed")
     finally:
         for process in processes:
             process.terminate()
