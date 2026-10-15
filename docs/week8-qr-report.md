@@ -127,11 +127,18 @@ SSO `Protocol` 的省略號介面宣告（16 行）；QR 檔案沒有被排除�
 | 真 HTTP OIDC／QR 編碼 smoke | 通過：Discovery、JWKS、Client callback／Session、資格、本人簽發及 PNG／ZXing round trip |
 | 真 HTTP QR 驗證 smoke | 通過：Scanner 換碼、最小回應、重播、新 Nonce、8 並行、Redis 真實寫入逾時 503／復原 |
 | 先前 #32 CI 基線 | [run 38670837428](https://github.com/smm2271/aletheia-backend/actions/runs/38670837428)，completed／success；不是本次新增 coverage 設定的執行結果 |
+| #33 遠端 CI | [run 38672545622](https://github.com/smm2271/aletheia-backend/actions/runs/38672545622)，commit `7ab90d6a27bba30348345c7ad08ae546a232d45f`；`test`、`compose` 均 success；**449 passed**、258 warnings、70.29 秒，兩個 HTTP smoke 通過，全來源合計 **91.31%**，QR 逐檔數據與本機一致 |
 | 本次原始本機證據 | `test-results/issue33/`：`pytest.xml`／`pytest.log`、`coverage.xml`／`coverage.json`／`htmlcov`、版本及兩份 HTTP smoke log（忽略 Git 追蹤） |
 
 本次 Docker 實測版本：Python 3.12.15、PostgreSQL 18.6、Redis 8.10.2、Docker 29.7.2、
 Compose 5.5.0；pytest 9.1.1、pytest-cov 7.1.0、coverage.py 7.16.2、FastAPI 0.143.1、
 Pydantic 2.14.1、SQLAlchemy 2.1.4、psycopg 3.3.6、redis-py 8.1.0。
+
+已查驗 #33 CI 的測試及 Compose job、coverage 產出 log 與 artifact metadata：
+[backend-test-results-38672545622-1](https://github.com/smm2271/aletheia-backend/actions/runs/38672545622/artifacts/11944503797)
+含 XML／JSON／HTML 覆蓋率；[compose-results-38672545622-1](https://github.com/smm2271/aletheia-backend/actions/runs/38672545622/artifacts/11945255572)
+保存 Compose 證據，預定 2026-11-14 到期。此後補入 CI 證據的提交僅修改本文件；
+執行數據對應上表的確切程式版本，不將未來或其他 commit 的 CI 視為已驗證。
 
 | 計量範圍 | 行覆蓋 | 分支覆蓋 | 行＋分支合計 |
 | --- | ---: | ---: | ---: |
