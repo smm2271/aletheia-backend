@@ -35,6 +35,7 @@ DEMO_CLIENT_ID=<registered client ID>
 DEMO_CLIENT_SECRET=<one-time returned secret>
 DEMO_PUBLIC_ORIGIN=http://127.0.0.1:8001
 DEMO_REDIS_URL=redis://localhost:6380/1
+DEMO_SCOPES=openid
 ```
 
 ```sh
@@ -45,6 +46,8 @@ python -m uvicorn demo_client.app:app --host 127.0.0.1 --port 8001 --no-access-l
 `http://localhost:8000` 有效登入，First-party Client 直接完成授權，不再呼叫 Google。
 否則由 Argus 的 Google OAuth 登入與既有 continuation 返回授權流程。
 正式使用須另配真實 Google credentials 與 HTTPS；自動化測試使用受控 Google 回應。
+若要測試學生資格的同一次授權，可在 Client 註冊允許 `student:eligibility:read`，
+並設定 `DEMO_SCOPES=openid student:eligibility:read`；Scope 仍由 Argus 註冊政策限制。
 
 Cookie 不以 Port 隔離，因此示範設定刻意使用不同 Hostname（Argus 為 localhost、
 Client 為 127.0.0.1），Client 設定也會拒絕與 Issuer 共用 Hostname。正式環境使用
@@ -76,6 +79,7 @@ Ed25519 簽章與公開 JWKS 驗證。HTTP 在測試程序內路由至 Backend�
 
 `python tests/smoke_oidc.py` 另啟動兩個真實 Uvicorn HTTP 服務，驗證 Discovery、
 JWKS、Code 交換、Client Callback／Session、資格 API 與登出隔離，已加入 CI。
+另包含本人 QR Token 簽發、重複請求不換證，以及 PNG／ZXing 解碼後驗簽。
 它要求 `TEST_DATABASE_URL` 指向專用空白 PostgreSQL，以及專用 `TEST_REDIS_URL`；
 會直接建立測試 Browser Session，不呼叫 Google。結束後清除測試資料庫 schema，
 只適用於隔離測試環境。
