@@ -29,7 +29,7 @@ class AuthorizationRequest(BaseModel):
     redirect_uri: str = Field(min_length=1, max_length=2048)
     scope: str = Field(min_length=1, max_length=4096)
     state: str | None = Field(default=None, max_length=4096)
-    nonce: str | None = Field(default=None, max_length=512)
+    nonce: str | None = Field(default=None, min_length=1, max_length=512)
     code_challenge: str | None = None
     code_challenge_method: str | None = None
 

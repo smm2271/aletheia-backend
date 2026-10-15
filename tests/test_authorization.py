@@ -8,6 +8,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
+from starlette.datastructures import QueryParams
 
 from main import app
 from models import ClientType, SSOClient, TrustLevel
@@ -92,6 +93,7 @@ def test_first_party_uses_session_and_code_bindings(auth_flow):
     {"client_id": "unknown"}, {"redirect_uri": "https://evil.example/callback"},
     {"redirect_uri": "https://consumer.example/callback?fixed=1&extra=yes"},
     {"scope": "openid email"}, {"response_type": "token"},
+    {"nonce": ""}, {"nonce": "", "scope": "profile"},
 ])
 def test_invalid_request_rejected_before_login(auth_flow, update):
     params = register(auth_flow)
@@ -103,6 +105,27 @@ def test_invalid_request_rejected_before_login(auth_flow, update):
 def test_disabled_client_cannot_authorize(auth_flow):
     params = register(auth_flow, enabled=False)
     assert authorize(auth_flow, params).status_code == 400
+
+
+@pytest.mark.parametrize("scope", ["openid profile", "profile"])
+@pytest.mark.parametrize("nonce", [None, "n", "n" * 512])
+def test_authorization_nonce_accepts_optional_nonempty_values(scope, nonce):
+    values = {"response_type": "code", "client_id": "consumer",
+              "redirect_uri": "https://consumer.example/callback", "scope": scope}
+    if nonce is not None:
+        values["nonce"] = nonce
+    assert service.parse_request(QueryParams(values)).nonce == nonce
+
+
+@pytest.mark.parametrize("scope", ["openid profile", "profile"])
+@pytest.mark.parametrize("nonce", ["", "n" * 513])
+def test_authorization_nonce_rejected_before_code_issuance(scope, nonce):
+    values = {"response_type": "code", "client_id": "consumer",
+              "redirect_uri": "https://consumer.example/callback", "scope": scope,
+              "nonce": nonce}
+    with pytest.raises(HTTPException) as error:
+        service.parse_request(QueryParams(values))
+    assert error.value.status_code == 400
 
 
 def test_external_consent_boundary_never_issues_code(auth_flow):
