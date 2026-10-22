@@ -12,6 +12,7 @@ from sso.jwt import JWTIssuer, JWTSettings
 from signing_keys import FileKeyProvider
 from qr.tokens import QRIssuer, QRSettings
 from qr.nonces import NonceSettings
+from qr.dynamic_tokens import DynamicQRIssuer
 
 from routes import router
 from routes.auth import router as auth_router
@@ -24,6 +25,7 @@ from routes.oidc import router as oidc_router
 from routes.student import router as student_router
 from routes.qr import router as qr_router
 from routes.qr_verification import router as qr_verification_router
+from routes.qr_dynamic import router as qr_dynamic_router
 
 
 @asynccontextmanager
@@ -43,6 +45,7 @@ async def lifespan(app: FastAPI):
         app.state.token_issuer = JWTIssuer(JWTSettings.from_environment(), keys) if keys is not None else None
         app.state.qr_issuer = QRIssuer(QRSettings.from_environment(app.state.token_issuer.settings.issuer), keys) if keys is not None else None
         app.state.qr_nonce_settings = NonceSettings.from_environment()
+        app.state.dynamic_qr_issuer = DynamicQRIssuer(app.state.qr_issuer.settings, keys) if keys is not None else None
         yield
     finally:
         try:
@@ -57,6 +60,7 @@ app.state.token_issuer = None
 app.state.sso_key_provider = None
 app.state.qr_issuer = None
 app.state.qr_nonce_settings = None
+app.state.dynamic_qr_issuer = None
 app.include_router(router)
 app.include_router(auth_router)
 app.include_router(session_router)
@@ -68,6 +72,7 @@ app.include_router(oidc_router)
 app.include_router(student_router)
 app.include_router(qr_router)
 app.include_router(qr_verification_router)
+app.include_router(qr_dynamic_router)
 
 
 @app.exception_handler(SessionError)

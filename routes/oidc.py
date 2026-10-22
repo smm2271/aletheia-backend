@@ -37,7 +37,7 @@ async def discovery(request: Request):
         "response_modes_supported": ["query"],
         "grant_types_supported": ["authorization_code"],
         "subject_types_supported": ["public"],
-        "scopes_supported": ["openid", "profile", "email", "student:eligibility:read", "qr:static:verify"],
+        "scopes_supported": ["openid", "profile", "email", "student:eligibility:read", "qr:static:verify", "qr:dynamic:verify"],
         "id_token_signing_alg_values_supported": ["EdDSA"],
         "token_endpoint_auth_methods_supported": ["client_secret_basic", "client_secret_post", "none"],
         "code_challenge_methods_supported": ["S256"],
