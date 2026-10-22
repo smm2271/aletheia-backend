@@ -8,3 +8,6 @@ __pycache__/
 secrets/
 test-results/
 compose-results/
+.coverage
+.coverage.*
+htmlcov/

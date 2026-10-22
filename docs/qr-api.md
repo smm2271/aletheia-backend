@@ -57,7 +57,10 @@ and lifetime. It does not query the credential mapping, user status, student
 eligibility, or admission rules. This issuance API does not authorize entry.
 
 Deleting a user cascades to the stored credential, and disabled users cannot
-obtain credentials. A future online scanning API must check the current mapping
+obtain credentials. The [online verification API](qr-verification.md) checks the current mapping
 and user state to reject deleted, disabled, or replaced credentials. An offline
 copy may still pass cryptographic validation within its signed lifetime: database
 changes do not provide immediate offline revocation.
+
+Swagger usage, request/response examples and W7–W8 acceptance evidence are in
+[week8-qr-report.md](week8-qr-report.md).
