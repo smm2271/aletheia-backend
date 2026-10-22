@@ -58,6 +58,8 @@ jobs:
         run: |
           set -o pipefail
           python tests/smoke_oidc.py 2>&1 | tee test-results/smoke-oidc.log
+      - name: Summarize W10 line and branch coverage
+        run: python tests/summarize_w10_coverage.py test-results/coverage.json | tee test-results/w10-coverage-summary.txt
       - name: Run live HTTP QR verification smoke test
         run: |
           set -o pipefail

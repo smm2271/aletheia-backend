@@ -29,6 +29,7 @@ from auth.session import COOKIE_NAME
 from database import create_database_engine
 from models import Affiliation, ClientType, SSOClient, TrustLevel, User
 from qr.nonces import NONCE_NAMESPACE, generate_nonce
+from smoke_dynamic_qr import dynamic_smoke
 from redis_connection import create_redis_client
 from signing_keys import KeyRing, SigningKey, save_key_file
 from smoke_oidc import browser_session, wait_for
@@ -37,7 +38,7 @@ from sso.clients import hash_secret
 
 def main():
     issuer = "http://localhost:18002"
-    scope = "qr:static:verify"
+    scope = "qr:static:verify qr:dynamic:verify"
     os.environ.update({
         "DATABASE_URL": os.environ["TEST_DATABASE_URL"], "REDIS_URL": os.environ["TEST_REDIS_URL"],
         "SESSION_PUBLIC_ORIGIN": issuer, "SESSION_COOKIE_SECURE": "false",
@@ -58,7 +59,7 @@ def main():
             holder_id, scanner_id = holder.id, scanner.id
             db.add(SSOClient(client_id=client_id, name="QR scanner smoke", client_type=ClientType.CONFIDENTIAL,
                              trust_level=TrustLevel.FIRST_PARTY, enabled=True, secret_hash=hash_secret(secret),
-                             redirect_uris=[callback], allowed_scopes=[scope]))
+                             redirect_uris=[callback], allowed_scopes=scope.split()))
             db.commit()
         for user_id in (holder_id, scanner_id):
             sessions.append((user_id, asyncio.run(browser_session(user_id))))
@@ -92,6 +93,7 @@ def main():
                 assert exchanged.status_code == 200
                 access = exchanged.json()["access_token"]
                 headers = {"Authorization": "Bearer " + access}
+                dynamic_smoke(browser, issuer, sessions[0][1], sessions[1][1], headers)
                 endpoint = issuer + "/api/v1/qr/static/verify"
                 nonce = generate_nonce()
                 nonces.append(nonce)
