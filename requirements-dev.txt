@@ -1,4 +1,7 @@
 -r requirements.txt
-pytest>=8.0,<10.0
+# pytest 9.2 setattr undo drops proxy attributes (Starlette State stores them in _state).
+# Keep fixture patches reversible until upstream restores custom __setattr__ support.
+pytest>=8.0,<9.2
+pytest-cov>=7.0,<8.0
 zxing-cpp>=2.3,<4.0
 Pillow>=11.0,<13.0

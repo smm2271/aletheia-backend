@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,11 +11,11 @@ from signing_keys import KeyManagementError
 
 
 class CredentialResponse(BaseModel):
-    token: str
-    credential_id: str
-    format_version: int = 1
-    issued_at: datetime
-    expires_at: datetime
+    token: str = Field(description="Signed compact JWT to encode directly into the QR image. Treat as a bearer secret.")
+    credential_id: str = Field(description="Opaque random credential reference; not a user ID.")
+    format_version: int = Field(default=1, description="Static QR format version, currently 1.")
+    issued_at: datetime = Field(description="UTC issuance timestamp of the stored credential.")
+    expires_at: datetime = Field(description="Authoritative UTC expiry. Repeated requests reuse the token until this time.")
 
 
 def get_or_issue(engine, user_id, issuer: QRIssuer) -> CredentialResponse:
