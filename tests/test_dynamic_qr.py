@@ -7,6 +7,7 @@ import os
 import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from unittest.mock import AsyncMock
 
 import jwt
@@ -222,12 +223,33 @@ def verify(server, token, access):
                               headers={"Authorization": "Bearer " + access} if access else {})
 
 
-def test_api_once_and_100_concurrent_requests(dynamic_flow):
-    server, token, claims, access, _ = dynamic_flow
-    with ThreadPoolExecutor(max_workers=20) as pool:
-        responses = list(pool.map(lambda _: verify(server, token, access), range(100)))
+def test_api_once_and_100_concurrent_requests(dynamic_flow, request):
+    server, _, _, access, _ = dynamic_flow
+    gate = Barrier(101, timeout=15)
+
+    def scan():
+        gate.wait()
+        return verify(server, token, access)
+
+    with ThreadPoolExecutor(max_workers=100) as pool:
+        futures = [pool.submit(scan) for _ in range(100)]
+        try:
+            # Issue after starting the workers so fixture setup cannot spend the TTL.
+            issued = server.client.post(ROOT + "/issue", headers=ORIGIN)
+            assert issued.status_code == 200
+            token = issued.json()["token"]
+            claims = app.state.dynamic_qr_issuer.validate(token)
+            request.addfinalizer(lambda: server.store.delete(state_key(claims["jti"])))
+            started = time.monotonic()
+            gate.wait()
+            responses = [future.result(timeout=15) for future in futures]
+        finally:
+            gate.abort()
+    assert time.monotonic() - started < 15
+    assert server.store.time()[0] < claims["exp"], "Race must finish before token expiry"
     assert all(r.status_code == 200 for r in responses)
-    assert sum(r.json()["valid"] for r in responses) == 1
+    assert [r.json() for r in responses].count({"valid": True}) == 1
+    assert [r.json() for r in responses].count({"valid": False}) == 99
     assert server.store.hget(state_key(claims["jti"]), "state") == "CONSUMED"
     assert all(r.headers["cache-control"] == "no-store" for r in responses)
     assert verify(server, token, access).json() == {"valid": False}

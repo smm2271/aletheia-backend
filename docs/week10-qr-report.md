@@ -42,8 +42,8 @@ Warnings 來自既有依賴的相容性／棄用通知，無失敗案例。
 | 時間邊界 | age=0／25／29 秒可驗證，30／31 秒及未生效 token 拒絕；固定 TTL=30 |
 | 輪替並存 | 模擬第 25 秒換發，舊新 jti 不同，Redis 舊 exp 不變，兩張均各成功一次；回應 refresh_after=25 |
 | 一次性狀態 | 真實 Redis Lua 100 個併發 consume，恰好一個成功，最終 CONSUMED；不能重註冊或撤銷後重啟 |
-| API 併發 | TestClient 的 100 個並行 verify 恰好一次 valid=true；其餘 valid=false，最終 CONSUMED |
-| 真實 HTTP 併發 | Uvicorn、HTTPX 與不同 holder／scanner，100 次並行掃描恰好一次成功 |
+| API 併發 | 修訂版使用 100 個 worker 與 101 方 Barrier（含主執行緒）同步釋放；100 個 verify 全部 HTTP 200，恰好一次 valid=true、99 次 valid=false，最終 CONSUMED |
+| 真實 HTTP 併發 | 修訂版使用 Uvicorn、HTTPX 與不同 holder／scanner，100 個 worker 經 Barrier 同步釋放；斷言 100 次 HTTP 200、一次 valid=true、99 次 valid=false、最終 CONSUMED，並輸出耗時 |
 | 撤銷與期限 | ISSUED→REVOKED、重複撤銷、已消耗、已撤銷、過期與缺失 state 均拒絕；獨立 token 狀態互不影響 |
 | 偽造與篡改 | 錯誤簽章／payload／issuer／audience／type／kid、過期／未生效 token、未註冊 jti 均拒絕 |
 | scanner 授權 | 缺少或無效 Access Token、錯 audience、缺 scope、目前 client／scanner 停用或移除 scope，均先拒絕且不消耗 |
@@ -83,7 +83,7 @@ W10 與本機相同（96.84%／94.44%）。跨環境分母依各 run 的 coverag
 [CI run 39712474206](https://github.com/smm2271/aletheia-backend/actions/runs/39712474206)
 對應實作與測試 commit `d4c38c8`，**completed / success**。
 test job **535 passed、0 skipped、285 warnings，60.91 秒**；兩個真實 HTTP smoke 均成功，
-包含 dynamic 100 併發與 Redis 真實 socket 逾時／恢復。compose job 亦成功，
+包含 dynamic 100 次請求（最多 20 個 worker，無同步閘門）與 Redis 真實 socket 逾時／恢復；此舊 run 不能作為 100 同時起跑的 HTTP 證據。compose job 亦成功，
 涵蓋建置、健康檢查、Session／授權、DB／Redis 故障恢復與 volume persistence。
 
 Run 頁面的 `backend-test-results-39712474206-1` 包含原始 coverage XML／HTML／JSON、
@@ -93,8 +93,19 @@ W10 摘要、JUnit、pytest 與 smoke logs、commit 與套件版本；
 
 ## 限制與後續
 
+2026-10-29 PR #48 審查修訂：API 與真實 HTTP 競態改為 100 個 worker 等待同一個同步閘門，
+worker 建立後才簽發新的 30 秒 token，再由主執行緒釋放全部請求。測試要求競態於 15 秒內完成，
+並以 Redis TIME 斷言最後完成時尚未到 exp，避免把過期拒絕當成一次性競態證據。
+所有請求均須正常回傳精確的布林結果與 no-store，最終 Redis state 必須為 CONSUMED。
+修訂版本機結果：專用 PostgreSQL 18／Redis 8 上 **86 passed、0 skipped（16.75 秒）**；
+真實 HTTP smoke **100/100 完成、1 true／99 false、CONSUMED、3.377 秒、完成時未到期**，
+W8／W10 HTTP smoke 與真實 Redis 逾時／恢復均通過。
+上述歷史覆蓋率與 CI 數值仍對應原始 commit；修訂版 CI 請見 PR 最新 head checks。
+
 - 驗證依賴單一 Redis 的原子性與可用性，非跨區域協定。Redis 資料遺失會安全拒絕尚未過期的 token。
 - 應用與 Redis 時鐘須同步。JWT 的 iat／nbf／exp 與 Redis TIME 共同限制期限，沒有寬限期。
 - CLIENT PAUSE 造成的逾時可能已提交消耗；服務不重試接受，前端應以新 token 重新開始受控業務流程。
 - 一次性 QR 不能防止有效期內被轉傳後搶先使用，也不等於支付／入場交易的冪等性。
 - 可後續補入 key provider／DB 故障的直接注入與跨多個 backend worker 的負載測試。
+- 動態 verify 不重新查詢持有人停用／刪除狀態；既有 token 仍受原本 30 秒期限與 Redis 狀態限制。即時失效要求需另行設計。
+- 既有 Compose 驗收預設未配置 signing keys，不代表 Compose 已啟用動態 QR；多 worker 部署仍須以共享金鑰及 Redis 另行驗證。

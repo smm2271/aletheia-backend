@@ -34,6 +34,10 @@ revoke 驗證完整簽章與 `sub`，不能用任意 jti 撤銷；過期或無�
 
 ## Redis 一次性狀態
 
+動態 verify 會重新查詢 scanner 與 client 的目前狀態，但不重新查詢 QR 持有人是否已停用或刪除。
+已簽發且仍為 ISSUED 的 token，在原本 30 秒有效期內仍可能被接受；不能沿用靜態 verifier 的即時持有人失效假設。
+若業務要求停用／刪除持有人立即使既有動態 token 失效，需另行設計查詢或撤銷機制。
+
 key：`qr:dyn:state:{sha256(jti)}`。Hash 僅存 `state`、`exp`、`typ`、`v`，
 不存原始 token、jti、sub 或其他身份資料。註冊以 Lua 原子確認不存在、尚未到期，
 建立 ISSUED 並設定絕對 EXPIREAT。只有確認註冊成功才將簽好的 token 回傳。
